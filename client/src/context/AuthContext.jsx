@@ -10,17 +10,29 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
-    if (token && storedUser) {
-      setUser(JSON.parse(storedUser));
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+    try {
+      if (token && storedUser && storedUser !== "undefined") {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+    } catch (err) {
+      console.error("Invalid user in localStorage, clearing...");
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
     }
+
     setLoading(false);
   }, []);
 
   const login = async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
     localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    if (data.user) {
+
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
     api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
     setUser(data.user);
     return data;
@@ -29,7 +41,10 @@ export function AuthProvider({ children }) {
   const register = async (username, email, password, companyName) => {
     const { data } = await api.post('/auth/register', { username, email, password, companyName });
     localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    if (data.user) {
+
+      localStorage.setItem('user', JSON.stringify(data.user));
+    }
     api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
     setUser(data.user);
     return data;
