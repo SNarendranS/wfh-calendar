@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
 import { useNotifications } from './hooks/useNotifications.js';
+import { ToastProvider } from './components/Layout/Toast.jsx';
 import Sidebar from './components/Layout/Sidebar.jsx';
+import BottomNav from './components/Layout/BottomNav.jsx';
 import LoginPage from './components/Auth/LoginPage.jsx';
 import Dashboard from './components/Dashboard/Dashboard.jsx';
 import CalendarPage from './components/Calendar/CalendarPage.jsx';
@@ -9,11 +11,13 @@ import NotificationsPage from './components/Notifications/NotificationsPage.jsx'
 import SettingsPage from './components/Settings/SettingsPage.jsx';
 
 function AppLayout() {
-  const { notifications, unreadCount } = useNotifications();
+  const { unreadCount } = useNotifications();
   return (
-    <div className="flex min-h-screen">
-      <Sidebar unreadCount={unreadCount} />
-      <main className="ml-64 flex-1 overflow-auto">
+    <div className="flex min-h-screen bg-slate-900">
+      <div className="hidden lg:block">
+        <Sidebar unreadCount={unreadCount} />
+      </div>
+      <main className="flex-1 lg:ml-64 pb-20 lg:pb-0 overflow-auto min-h-screen">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/calendar" element={<CalendarPage />} />
@@ -22,6 +26,9 @@ function AppLayout() {
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
+      <div className="lg:hidden">
+        <BottomNav unreadCount={unreadCount} />
+      </div>
     </div>
   );
 }
@@ -44,10 +51,12 @@ function ProtectedApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <ProtectedApp />
-      </BrowserRouter>
-    </AuthProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <ProtectedApp />
+        </BrowserRouter>
+      </AuthProvider>
+    </ToastProvider>
   );
 }
