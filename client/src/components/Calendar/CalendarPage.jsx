@@ -117,7 +117,7 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
   return (
     <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full lg:max-w-md bg-slate-800 rounded-t-3xl lg:rounded-2xl border border-slate-700 shadow-2xl">
+      <div className="relative w-full lg:max-w-md bg-slate-800 rounded-t-3xl lg:rounded-2xl border border-slate-700 shadow-2xl mb-16 lg:mb-0">
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1 lg:hidden">
           <div className="w-10 h-1 bg-slate-600 rounded-full" />
@@ -170,7 +170,7 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
           </div>
         </div>
 
-        <div className="flex gap-2 px-5 pb-6 lg:pb-5 pt-0">
+        <div className="flex gap-2 px-5 pb-6 lg:pb-5 pt-0" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
           {entry && (
             <button onClick={() => { onDelete(toDateStr(date)); toast.info('Removed', `Entry cleared for ${format(date, 'MMM d')}`); onClose(); }}
               className="w-12 h-12 flex items-center justify-center bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl flex-shrink-0 active:bg-red-500/20">

@@ -22,14 +22,22 @@ router.put('/', protect, async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    // Re-sync leave balance totals for current year if leaveTypes changed
+    // Re-sync leave balances for current year
     if (leaveTypes) {
       const year = new Date().getFullYear();
       let lb = await LeaveBalance.findOne({ userId: req.user._id, year });
       if (lb) {
         lb.balances = leaveTypes.map(lt => {
           const existing = lb.balances.find(b => b.leaveKey === lt.key);
-          return { leaveKey: lt.key, total: lt.yearlyQuota, used: existing?.used || 0, carried: existing?.carried || 0 };
+          return {
+            leaveKey:     lt.key,
+            total:        lt.unlimited ? 0 : lt.yearlyQuota,
+            used:         existing?.used || 0,
+            carried:      existing?.carried || 0,
+            unlimited:    lt.unlimited || false,
+            monthlyQuota: lt.monthlyQuota || 0,
+            weeklyQuota:  lt.weeklyQuota  || 0,
+          };
         });
         await lb.save();
       }
