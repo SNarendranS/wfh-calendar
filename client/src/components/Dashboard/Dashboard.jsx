@@ -5,7 +5,6 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
 import { MONTH_NAMES_FULL, MONTH_NAMES, toDateStr } from '../../utils/dateHelpers.js';
 
-/* ── Stat Card ─────────────────────────────────────────────────────────── */
 function StatCard({ icon: Icon, label, value, sub, color, bgColor }) {
   return (
     <div className="rounded-2xl p-4 border border-slate-700 bg-slate-800">
@@ -21,13 +20,11 @@ function StatCard({ icon: Icon, label, value, sub, color, bgColor }) {
   );
 }
 
-/* ── Leave Balance Bar ─────────────────────────────────────────────────── */
 function LeaveBar({ b, lt }) {
   const isUnlimited = b.unlimited;
   const pct = isUnlimited ? 0 : (b.total ? Math.min(100, (b.used / b.total) * 100) : 0);
   const remaining = isUnlimited ? '∞' : (b.total - b.used);
   const color = lt?.color || '#10b981';
-
   return (
     <div className="space-y-1">
       <div className="flex justify-between items-center">
@@ -39,14 +36,11 @@ function LeaveBar({ b, lt }) {
           {isUnlimited ? `${b.used} used · ∞` : `${remaining} left / ${b.total}`}
         </span>
       </div>
-
       {!isUnlimited && (
         <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
           <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, backgroundColor: color }} />
         </div>
       )}
-
-      {/* Period usage pills */}
       <div className="flex gap-2 flex-wrap">
         {b.weeklyQuota > 0 && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
@@ -68,29 +62,23 @@ function LeaveBar({ b, lt }) {
   );
 }
 
-/* ── Mini Calendar ──────────────────────────────────────────────────────── */
 function MiniCalendar({ year, month, holidays, entries }) {
-  const start  = startOfMonth(new Date(year, month - 1));
-  const end    = endOfMonth(start);
-  const days   = eachDayOfInterval({ start, end });
-  const firstDow = getDay(start); // 0=Sun
-
-  // Include both company holidays and calendar HOLIDAY entries
+  const start = startOfMonth(new Date(year, month - 1));
+  const end = endOfMonth(start);
+  const days = eachDayOfInterval({ start, end });
+  const firstDow = getDay(start);
   const calEntryHolidays = entries.filter(e => e.type === 'HOLIDAY').map(e => e.date);
   const holidayDates = new Set([...holidays.map(h => h.date), ...calEntryHolidays]);
   const entryMap = entries.reduce((a, e) => { a[e.date] = e; return a; }, {});
-
   const cells = [];
   for (let i = 0; i < firstDow; i++) cells.push(null);
   days.forEach(d => cells.push(d));
   while (cells.length % 7 !== 0) cells.push(null);
-
   const today = toDateStr(new Date());
-
   return (
     <div>
-      <div className="grid grid-cols-7 mb-1">
-        {['S','M','T','W','T','F','S'].map((d, i) => (
+      <div className="grid grid-cols-7 mb-0">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
           <div key={i} className="text-center text-[9px] font-semibold text-slate-600 py-0.5">{d}</div>
         ))}
       </div>
@@ -103,16 +91,13 @@ function MiniCalendar({ year, month, holidays, entries }) {
           const isHoliday = holidayDates.has(ds);
           const entry = entryMap[ds];
           const isToday = ds === today;
-
           return (
-            <div key={i} className={`relative flex items-center justify-center rounded-md
-              text-[10px] font-medium aspect-square transition
+            <div key={i} className={`relative flex items-center justify-center rounded-md text-[10px] font-medium size-12 my-0.5 mx-2 transition
               ${isToday ? 'ring-1 ring-blue-500' : ''}
               ${isHoliday ? 'bg-violet-500/20 text-violet-300' :
                 entry?.type === 'WFH' ? 'bg-blue-500/20 text-blue-300' :
-                entry?.type === 'LEAVE' ? 'bg-emerald-500/20 text-emerald-300' :
-                isWeekend ? 'text-slate-600' : 'text-slate-400'}
-            `}>
+                  entry?.type === 'LEAVE' ? 'bg-emerald-500/20 text-emerald-300' :
+                    isWeekend ? 'text-slate-600' : 'text-slate-400'}`}>
               {date.getDate()}
               {isHoliday && <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-violet-400 rounded-full" />}
             </div>
@@ -123,25 +108,23 @@ function MiniCalendar({ year, month, holidays, entries }) {
   );
 }
 
-/* ── Holiday Calendar Section ───────────────────────────────────────────── */
 function HolidayCalendar({ holidays, entries }) {
   const now = new Date();
-  const [tab, setTab] = useState('calendar'); // 'calendar' | 'list'
-  const [viewYear,  setViewYear]  = useState(now.getFullYear());
+  const [tab, setTab] = useState('calendar');
+  const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth() + 1);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 5;
 
   const navigate = (dir) => {
     let m = viewMonth + dir, y = viewYear;
-    if (m > 12) { m = 1;  y++; }
-    if (m < 1)  { m = 12; y--; }
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
     setViewMonth(m); setViewYear(y);
   };
 
   const today = toDateStr(now);
 
-  // Merge company public holidays + calendar HOLIDAY entries (deduped by date)
   const calHolidays = entries
     .filter(e => e.type === 'HOLIDAY')
     .map(e => ({ date: e.date, name: e.note || e.holidayName || 'Holiday' }));
@@ -150,58 +133,54 @@ function HolidayCalendar({ holidays, entries }) {
   ).sort((a, b) => a.date.localeCompare(b.date));
 
   const upcomingAll = allHolidays.filter(h => h.date >= today);
-  const totalPages  = Math.ceil(upcomingAll.length / PAGE_SIZE);
-  const pageItems   = upcomingAll.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const totalPages = Math.ceil(upcomingAll.length / PAGE_SIZE);
+  const pageItems = upcomingAll.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  // Month entries for mini calendar
   const monthEntries = entries.filter(e => {
     const [y, m] = e.date.split('-').map(Number);
     return y === viewYear && m === viewMonth;
   });
 
   return (
-    <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
-      {/* Header with toggle */}
-      <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+    <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden flex flex-col"
+      style={{ minHeight: '26rem', maxHeight: '28rem' }}>
+
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-violet-400" />
           <h2 className="text-white font-semibold text-sm">Holiday Calendar</h2>
         </div>
-        {/* Toggle pill */}
         <div className="flex bg-slate-900 rounded-lg p-0.5 gap-0.5">
-          {[['calendar','Cal'],['list','List']].map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
-                tab === key ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
-              }`}>
+          {[['calendar', 'Cal'], ['list', 'List']].map(([key, label]) => (
+            <button key={key} onClick={() => { setTab(key); setPage(0); }}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition ${tab === key ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+                }`}>
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="p-4">
+      {/* Body */}
+      <div className="flex-1 flex flex-col overflow-hidden p-4 pb-6">
         {tab === 'calendar' ? (
-          /* ── Calendar view ── */
-          <div className="space-y-3">
+          <div className="space-y-3 pb-4">
             <div className="flex items-center justify-between">
               <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg bg-slate-700 text-slate-400 active:bg-slate-600">
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="text-slate-200 text-xs font-semibold">
-                {MONTH_NAMES_FULL[viewMonth-1]} {viewYear}
-              </span>
+              <span className="text-slate-200 text-xs font-semibold">{MONTH_NAMES_FULL[viewMonth - 1]} {viewYear}</span>
               <button onClick={() => navigate(1)} className="p-1.5 rounded-lg bg-slate-700 text-slate-400 active:bg-slate-600">
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
             <MiniCalendar year={viewYear} month={viewMonth} holidays={allHolidays} entries={monthEntries} />
-            {/* Legend */}
             <div className="flex gap-3 pt-1 flex-wrap">
               {[
                 { color: 'bg-violet-500/50', label: 'Holiday' },
-                { color: 'bg-blue-500/50',   label: 'WFH'     },
-                { color: 'bg-emerald-500/50',label: 'Leave'   },
+                { color: 'bg-blue-500/50', label: 'WFH' },
+                { color: 'bg-emerald-500/50', label: 'Leave' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5 text-[10px] text-slate-500">
                   <div className={`w-2.5 h-2.5 rounded ${l.color}`} />{l.label}
@@ -210,33 +189,29 @@ function HolidayCalendar({ holidays, entries }) {
             </div>
           </div>
         ) : (
-          /* ── List view with pagination ── */
-          <div className="space-y-3">
-            <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold">
+          /* List view — flex column so pagination sticks to bottom */
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-2 flex-shrink-0">
               {upcomingAll.length} upcoming holiday{upcomingAll.length !== 1 ? 's' : ''}
             </p>
 
             {upcomingAll.length === 0 ? (
-              <div className="text-center py-8">
-                <CalendarDays className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+              <div className="flex-1 flex flex-col items-center justify-center">
+                <CalendarDays className="w-8 h-8 text-slate-700 mb-2" />
                 <p className="text-slate-600 text-xs">No upcoming holidays</p>
               </div>
             ) : (
               <>
-                <div className="space-y-2">
+                {/* Scrollable list */}
+                <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 scrollbar-hide">
                   {pageItems.map((h, i) => {
                     const d = parseISO(h.date);
                     const globalIdx = page * PAGE_SIZE + i;
                     const isNext = globalIdx === 0;
-                    const isPast = h.date < today;
                     return (
                       <div key={h.date}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition
-                          ${isNext
-                            ? 'bg-violet-600/15 border-violet-500/30'
-                            : 'bg-slate-700/30 border-slate-700/50'
-                          }`}>
-                        {/* Date badge */}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition flex-shrink-0
+                          ${isNext ? 'bg-violet-600/15 border-violet-500/30' : 'bg-slate-700/30 border-slate-700/50'}`}>
                         <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex flex-col items-center justify-center
                           ${isNext ? 'bg-violet-600/30' : 'bg-slate-700'}`}>
                           <span className={`text-[9px] uppercase font-bold leading-none ${isNext ? 'text-violet-300' : 'text-slate-500'}`}>
@@ -247,39 +222,38 @@ function HolidayCalendar({ holidays, entries }) {
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${isNext ? 'text-white' : 'text-slate-200'}`}>
-                            {h.name}
-                          </p>
+                          <p className={`text-sm font-medium truncate ${isNext ? 'text-white' : 'text-slate-200'}`}>{h.name}</p>
                           <p className={`text-[10px] mt-0.5 ${isNext ? 'text-violet-400' : 'text-slate-500'}`}>
                             {format(d, 'EEEE')}{isNext ? ' · Next holiday' : ''}
                           </p>
                         </div>
-                        {isNext && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 animate-pulse" />
-                        )}
+                        {isNext && <div className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 animate-pulse" />}
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between pt-1">
-                    <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400
-                        disabled:opacity-30 bg-slate-700 active:bg-slate-600 transition">
-                      <ChevronLeft className="w-3 h-3" /> Prev
-                    </button>
-                    <span className="text-slate-500 text-xs">
-                      {page + 1} / {totalPages}
-                    </span>
-                    <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400
-                        disabled:opacity-30 bg-slate-700 active:bg-slate-600 transition">
-                      Next <ChevronRight className="w-3 h-3" />
-                    </button>
+                {/* Pagination — always fixed at bottom of the card */}
+                <div className="flex-shrink-0 pt-3 mt-2 border-t border-slate-700/60 flex items-center justify-between">
+                  <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold
+                      text-slate-300 bg-slate-700 disabled:opacity-30 active:bg-slate-600 transition">
+                    <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                  </button>
+                  {/* Dot indicators */}
+                  <div className="flex items-center gap-1.5">
+                    {Array.from({ length: totalPages }).map((_, i) => (
+                      <button key={i} onClick={() => setPage(i)}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${i === page ? 'bg-violet-400 w-4' : 'bg-slate-600 w-1.5 hover:bg-slate-500'
+                          }`} />
+                    ))}
                   </div>
-                )}
+                  <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold
+                      text-slate-300 bg-slate-700 disabled:opacity-30 active:bg-slate-600 transition">
+                    Next <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -289,17 +263,16 @@ function HolidayCalendar({ holidays, entries }) {
   );
 }
 
-/* ── Main Dashboard ─────────────────────────────────────────────────────── */
 export default function Dashboard() {
-  const now   = new Date();
-  const year  = now.getFullYear();
+  const now = new Date();
+  const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const { user, logout } = useAuth();
-  const [balance, setBalance]         = useState(null);
-  const [company, setCompany]         = useState(null);
+  const [balance, setBalance] = useState(null);
+  const [company, setCompany] = useState(null);
   const [monthEntries, setMonthEntries] = useState([]);
-  const [allEntries, setAllEntries]   = useState([]);
-  const [loading, setLoading]         = useState(true);
+  const [allEntries, setAllEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -312,23 +285,19 @@ export default function Dashboard() {
       setCompany(co.data);
       setMonthEntries(me.data);
       setAllEntries(all.data);
-    }).catch(() => {}).finally(() => setLoading(false));
+    }).catch(() => { }).finally(() => setLoading(false));
   }, []);
 
   const wfhThisMonth = monthEntries.filter(e => e.type === 'WFH').length;
   const leaveThisMonth = monthEntries.filter(e => e.type === 'LEAVE').length;
   const wfhQuota = company?.wfhPerMonth || 8;
-
   const today = toDateStr(now);
+
   const upcoming = allEntries
-    .filter(e => e.date >= today && ['WFH','LEAVE','HOLIDAY'].includes(e.type))
+    .filter(e => e.date >= today && ['WFH', 'LEAVE', 'HOLIDAY'].includes(e.type))
     .slice(0, 5);
 
-  const TYPE_DOT = {
-    WFH:     'bg-blue-500',
-    LEAVE:   'bg-emerald-500',
-    HOLIDAY: 'bg-violet-500',
-  };
+  const TYPE_DOT = { WFH: 'bg-blue-500', LEAVE: 'bg-emerald-500', HOLIDAY: 'bg-violet-500' };
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -342,7 +311,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between lg:hidden pt-2">
         <div>
           <h1 className="text-xl font-bold text-white">Hi, {user?.username} 👋</h1>
-          <p className="text-slate-400 text-xs mt-0.5">{MONTH_NAMES_FULL[month-1]} {year}</p>
+          <p className="text-slate-400 text-xs mt-0.5">{MONTH_NAMES_FULL[month - 1]} {year}</p>
         </div>
         <button onClick={logout} className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 active:bg-slate-700">
           <LogOut className="w-4 h-4" />
@@ -350,15 +319,15 @@ export default function Dashboard() {
       </div>
       <div className="hidden lg:block">
         <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-        <p className="text-slate-400 text-sm">{MONTH_NAMES_FULL[month-1]} {year}</p>
+        <p className="text-slate-400 text-sm">{MONTH_NAMES_FULL[month - 1]} {year}</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Home}          label="WFH This Month" value={wfhThisMonth}              sub={`of ${wfhQuota} quota`} color="text-blue-400"    bgColor="bg-blue-500/10" />
-        <StatCard icon={CalendarCheck} label="WFH Remaining"  value={wfhQuota - wfhThisMonth}   sub="days left"             color="text-cyan-400"    bgColor="bg-cyan-500/10" />
-        <StatCard icon={Palmtree}      label="Leaves Taken"   value={leaveThisMonth}             sub="this month"            color="text-emerald-400" bgColor="bg-emerald-500/10" />
-        <StatCard icon={TrendingUp}    label="Office Days"    value={monthEntries.filter(e=>e.type==='OFFICE').length} sub="logged" color="text-violet-400" bgColor="bg-violet-500/10" />
+        <StatCard icon={Home} label="WFH This Month" value={wfhThisMonth} sub={`of ${wfhQuota} quota`} color="text-blue-400" bgColor="bg-blue-500/10" />
+        <StatCard icon={CalendarCheck} label="WFH Remaining" value={wfhQuota - wfhThisMonth} sub="days left" color="text-cyan-400" bgColor="bg-cyan-500/10" />
+        <StatCard icon={Palmtree} label="Leaves Taken" value={leaveThisMonth} sub="this month" color="text-emerald-400" bgColor="bg-emerald-500/10" />
+        <StatCard icon={TrendingUp} label="Office Days" value={monthEntries.filter(e => e.type === 'OFFICE').length} sub="logged" color="text-violet-400" bgColor="bg-violet-500/10" />
       </div>
 
       {/* WFH quota bar */}
@@ -369,13 +338,12 @@ export default function Dashboard() {
         </div>
         <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
           <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-700"
-            style={{ width: `${Math.min(100,(wfhThisMonth/wfhQuota)*100)}%` }} />
+            style={{ width: `${Math.min(100, (wfhThisMonth / wfhQuota) * 100)}%` }} />
         </div>
       </div>
 
-      {/* Two-column on desktop: Leave Balance + Holiday Calendar */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Leave Balances */}
+      {/* Two-column: Leave Balance + Holiday Calendar */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">
         {balance && company && (
           <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
             <h2 className="text-white font-semibold mb-4 flex items-center gap-2 text-sm">
@@ -389,13 +357,8 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-
-        {/* Holiday Calendar */}
         {company && (
-          <HolidayCalendar
-            holidays={company.publicHolidays || []}
-            entries={allEntries}
-          />
+          <HolidayCalendar holidays={company.publicHolidays || []} entries={allEntries} />
         )}
       </div>
 
@@ -417,7 +380,7 @@ export default function Dashboard() {
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg flex-shrink-0
                     ${e.type === 'WFH' ? 'bg-blue-500/20 text-blue-300' :
                       e.type === 'LEAVE' ? 'bg-emerald-500/20 text-emerald-300' :
-                      'bg-violet-500/20 text-violet-300'}`}>
+                        'bg-violet-500/20 text-violet-300'}`}>
                     {e.type}{e.leaveType ? ` · ${e.leaveType}` : ''}
                   </span>
                 </div>
@@ -427,7 +390,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* WFH quota warning */}
       {wfhThisMonth < Math.ceil(wfhQuota / 2) && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
