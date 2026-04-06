@@ -142,9 +142,11 @@ function HolidayCalendar({ holidays, entries }) {
   });
 
   return (
-    <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden flex flex-col"
-      style={{ minHeight: '26rem', maxHeight: '28rem' }}>
-
+    // Fixed height — never shrinks or grows between tabs or pages
+    <div
+      className="bg-slate-800 rounded-2xl border border-slate-700 flex flex-col overflow-hidden"
+      style={{ height: '32rem' }}
+    >
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -154,29 +156,47 @@ function HolidayCalendar({ holidays, entries }) {
         <div className="flex bg-slate-900 rounded-lg p-0.5 gap-0.5">
           {[['calendar', 'Cal'], ['list', 'List']].map(([key, label]) => (
             <button key={key} onClick={() => { setTab(key); setPage(0); }}
-              className={`px-3 py-1 rounded-md text-xs font-semibold transition ${tab === key ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
-                }`}>
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
+                tab === key ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}>
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 flex flex-col overflow-hidden p-4 pb-6">
+      {/* Body — fills remaining fixed height, no overflow-hidden so nothing clips */}
+      <div className="flex-1 flex flex-col p-4 min-h-0">
+
         {tab === 'calendar' ? (
-          <div className="space-y-3 pb-4">
-            <div className="flex items-center justify-between">
+          // flex-col + h-full so legend is always last and never hidden
+          <div className="flex flex-col h-full">
+
+            {/* Month nav */}
+            <div className="flex items-center justify-between flex-shrink-0 mb-3">
               <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg bg-slate-700 text-slate-400 active:bg-slate-600">
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="text-slate-200 text-xs font-semibold">{MONTH_NAMES_FULL[viewMonth - 1]} {viewYear}</span>
+              <span className="text-slate-200 text-xs font-semibold">
+                {MONTH_NAMES_FULL[viewMonth - 1]} {viewYear}
+              </span>
               <button onClick={() => navigate(1)} className="p-1.5 rounded-lg bg-slate-700 text-slate-400 active:bg-slate-600">
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
-            <MiniCalendar year={viewYear} month={viewMonth} holidays={allHolidays} entries={monthEntries} />
-            <div className="flex gap-3 pt-1 flex-wrap">
+
+            {/* Calendar grid */}
+            <div className="flex-1 min-h-0">
+              <MiniCalendar
+                year={viewYear}
+                month={viewMonth}
+                holidays={allHolidays}
+                entries={monthEntries}
+              />
+            </div>
+
+            {/* Legend — flex-shrink-0 so it is NEVER clipped regardless of how many rows the month has */}
+            <div className="flex gap-3 pt-2 flex-wrap flex-shrink-0">
               {[
                 { color: 'bg-violet-500/50', label: 'Holiday' },
                 { color: 'bg-blue-500/50', label: 'WFH' },
@@ -188,9 +208,11 @@ function HolidayCalendar({ holidays, entries }) {
               ))}
             </div>
           </div>
+
         ) : (
-          /* List view — flex column so pagination sticks to bottom */
-          <div className="flex flex-col flex-1 overflow-hidden">
+          // List tab — h-full + flex-col, pagination always pinned to bottom via mt-auto
+          <div className="flex flex-col h-full">
+
             <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-2 flex-shrink-0">
               {upcomingAll.length} upcoming holiday{upcomingAll.length !== 1 ? 's' : ''}
             </p>
@@ -202,16 +224,19 @@ function HolidayCalendar({ holidays, entries }) {
               </div>
             ) : (
               <>
-                {/* Scrollable list */}
-                <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 scrollbar-hide">
+                {/* No scroll — items stack naturally, empty space shows below if fewer than PAGE_SIZE */}
+                <div className="space-y-2 flex-shrink-0">
                   {pageItems.map((h, i) => {
                     const d = parseISO(h.date);
                     const globalIdx = page * PAGE_SIZE + i;
                     const isNext = globalIdx === 0;
                     return (
                       <div key={h.date}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition flex-shrink-0
-                          ${isNext ? 'bg-violet-600/15 border-violet-500/30' : 'bg-slate-700/30 border-slate-700/50'}`}>
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition
+                          ${isNext
+                            ? 'bg-violet-600/15 border-violet-500/30'
+                            : 'bg-slate-700/30 border-slate-700/50'
+                          }`}>
                         <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex flex-col items-center justify-center
                           ${isNext ? 'bg-violet-600/30' : 'bg-slate-700'}`}>
                           <span className={`text-[9px] uppercase font-bold leading-none ${isNext ? 'text-violet-300' : 'text-slate-500'}`}>
@@ -222,33 +247,41 @@ function HolidayCalendar({ holidays, entries }) {
                           </span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${isNext ? 'text-white' : 'text-slate-200'}`}>{h.name}</p>
+                          <p className={`text-sm font-medium truncate ${isNext ? 'text-white' : 'text-slate-200'}`}>
+                            {h.name}
+                          </p>
                           <p className={`text-[10px] mt-0.5 ${isNext ? 'text-violet-400' : 'text-slate-500'}`}>
                             {format(d, 'EEEE')}{isNext ? ' · Next holiday' : ''}
                           </p>
                         </div>
-                        {isNext && <div className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 animate-pulse" />}
+                        {isNext && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0 animate-pulse" />
+                        )}
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Pagination — always fixed at bottom of the card */}
-                <div className="flex-shrink-0 pt-3 mt-2 border-t border-slate-700/60 flex items-center justify-between">
-                  <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                {/* mt-auto pins pagination to bottom regardless of item count on the page */}
+                <div className="mt-auto pt-3 border-t border-slate-700/60 flex items-center justify-between flex-shrink-0">
+                  <button
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                    disabled={page === 0}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold
                       text-slate-300 bg-slate-700 disabled:opacity-30 active:bg-slate-600 transition">
                     <ChevronLeft className="w-3.5 h-3.5" /> Prev
                   </button>
-                  {/* Dot indicators */}
                   <div className="flex items-center gap-1.5">
                     {Array.from({ length: totalPages }).map((_, i) => (
                       <button key={i} onClick={() => setPage(i)}
-                        className={`h-1.5 rounded-full transition-all duration-300 ${i === page ? 'bg-violet-400 w-4' : 'bg-slate-600 w-1.5 hover:bg-slate-500'
-                          }`} />
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          i === page ? 'bg-violet-400 w-4' : 'bg-slate-600 w-1.5 hover:bg-slate-500'
+                        }`} />
                     ))}
                   </div>
-                  <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold
                       text-slate-300 bg-slate-700 disabled:opacity-30 active:bg-slate-600 transition">
                     Next <ChevronRight className="w-3.5 h-3.5" />
