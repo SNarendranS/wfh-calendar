@@ -22,10 +22,11 @@ function StatCard({ icon: Icon, label, value, sub, color, bgColor }) {
 
 function LeaveBar({ b, lt }) {
   const isUnlimited = b.unlimited;
-  // Show accrued vs used (instead of total)
   const accrued = b.accrued || b.total;
-  const pct = isUnlimited ? 0 : (accrued ? Math.min(100, (b.used / accrued) * 100) : 0);
-  const remaining = isUnlimited ? '∞' : Math.max(0, accrued - b.used);
+  const carried = b.carried || 0;
+  const available = b.available !== undefined ? b.available : Math.max(0, accrued + carried - b.used);
+  const pct = isUnlimited ? 0 : (available ? Math.min(100, (b.used / (available + b.used)) * 100) : 0);
+  const remaining = isUnlimited ? '∞' : available;
   const color = lt?.color || '#10b981';
   return (
     <div className="space-y-1">
@@ -35,7 +36,7 @@ function LeaveBar({ b, lt }) {
           <span className="text-slate-200 text-sm font-medium">{lt?.label || b.leaveKey}</span>
         </div>
         <span className="text-slate-400 text-xs font-medium">
-          {isUnlimited ? `${b.used} used · ∞` : `${remaining} left / ${accrued} accrued`}
+          {isUnlimited ? `${b.used} used · ∞` : `${remaining} available`}
         </span>
       </div>
       {!isUnlimited && (
@@ -44,6 +45,22 @@ function LeaveBar({ b, lt }) {
         </div>
       )}
       <div className="flex gap-2 flex-wrap">
+        {/* Keka-style breakdown */}
+        <span className="text-[10px] text-slate-400 bg-slate-700/50 rounded-md px-1.5 py-0.5">
+          Used {b.used} day{b.used !== 1 ? 's' : ''}
+        </span>
+        <span className="text-[10px] text-slate-400 bg-slate-700/50 rounded-md px-1.5 py-0.5">
+          Accrued {accrued}
+        </span>
+        {carried > 0 && (
+          <span className="text-[10px] text-amber-400 bg-amber-500/10 rounded-md px-1.5 py-0.5">
+            Carryover {carried}
+          </span>
+        )}
+        <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
+          Annual {b.total}
+        </span>
+
         {b.weeklyQuota > 0 && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
             This week: {b.usedThisWeek || 0}/{b.weeklyQuota}
@@ -57,12 +74,6 @@ function LeaveBar({ b, lt }) {
         {isUnlimited && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
             {b.usedThisMonth || 0} days this month
-          </span>
-        )}
-        {/* Show full year total as a subtle reference */}
-        {!isUnlimited && b.total > 0 && b.total !== accrued && (
-          <span className="text-[10px] text-slate-600 bg-slate-700/50 rounded-md px-1.5 py-0.5">
-            Full year: {b.total}
           </span>
         )}
       </div>

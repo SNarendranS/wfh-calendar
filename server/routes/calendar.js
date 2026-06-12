@@ -105,21 +105,23 @@ router.post('/', protect, async (req, res) => {
 
     let warnings = [];
 
-    // Validate leave against accrued balance
+    // Validate leave against available balance (accrued + carried)
     if (type === 'LEAVE' && leaveType) {
       const ltConfig = company?.leaveTypes?.find(l => l.key === leaveType);
       if (ltConfig && !ltConfig.unlimited) {
         const lb = await LeaveBalance.findOne({ userId: req.user._id, year });
         const balance = lb?.balances?.find(b => b.leaveKey === leaveType);
         const accrued = getAccrued(ltConfig, year);
+        const carried = balance?.carried || 0;
+        const available = accrued + carried;
         const used = (balance?.used || 0);
 
-        // Check if applying this leave would exceed accrued
+        // Check if applying this leave would exceed available (accrued + carried)
         const existingEntry = await CalendarEntry.findOne({ userId: req.user._id, date });
         const isNew = !existingEntry || existingEntry.type !== 'LEAVE' || existingEntry.leaveType !== leaveType;
-        if (isNew && used >= accrued) {
+        if (isNew && used >= available) {
           return res.status(400).json({
-            message: `Insufficient accrued leave. You have used ${used}/${accrued} ${ltConfig.label} leaves so far. More leaves will be credited on the next cycle (${ltConfig.accrualRule?.frequency || 'yearly'}).`
+            message: `Insufficient leave balance. You have used ${used}/${available} ${ltConfig.label} leaves (${accrued} accrued + ${carried} carried). More leaves will be credited on the next cycle (${ltConfig.accrualRule?.frequency || 'yearly'}).`
           });
         }
       }

@@ -5,6 +5,7 @@ const leaveTypeSchema = new mongoose.Schema({
   label: { type: String, required: true },
   color: { type: String, default: '#6366f1' },
   carryForward: { type: Boolean, default: false },
+  maxCarryover: { type: Number, default: 0 }, // 0 = no limit, e.g. 5 = max 5 days can carry
   unlimited: { type: Boolean, default: false },
   yearlyQuota:  { type: Number, default: 0 },
   monthlyQuota: { type: Number, default: 0 }, // 0 = no cap
@@ -22,7 +23,7 @@ const companySchema = new mongoose.Schema({
   leaveTypes: {
     type: [leaveTypeSchema],
     default: [
-      { key: 'PL',  label: 'Paid Leave',       yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true,  unlimited: false, accrualRule: { frequency: 'monthly', creditDay: 30 } },
+      { key: 'PL',  label: 'Paid Leave',       yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true, maxCarryover: 5, unlimited: false, accrualRule: { frequency: 'monthly', creditDay: 30 } },
       { key: 'ML',  label: 'Medical Leave',     yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, unlimited: false, accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
       { key: 'EL',  label: 'Election Leave',    yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
       { key: 'UL',  label: 'Unpaid Leave',      yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, unlimited: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },

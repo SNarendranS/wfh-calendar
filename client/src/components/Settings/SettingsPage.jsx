@@ -18,11 +18,11 @@ const ACCRUAL_FREQUENCIES = [
 ];
 
 const DEFAULT_LEAVE_TYPES = [
-  { key: 'PL',  label: 'Paid Leave',     yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true,  unlimited: false, accrualRule: { frequency: 'monthly', creditDay: 30 } },
-  { key: 'ML',  label: 'Medical Leave',  yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, unlimited: false, accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
-  { key: 'EL',  label: 'Election Leave', yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
-  { key: 'UL',  label: 'Unpaid Leave',   yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, unlimited: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },
-  { key: 'PAT', label: 'Paternity Leave',yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'PL',  label: 'Paid Leave',     yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true, maxCarryover: 5, unlimited: false, accrualRule: { frequency: 'monthly', creditDay: 30 } },
+  { key: 'ML',  label: 'Medical Leave',  yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
+  { key: 'EL',  label: 'Election Leave', yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'UL',  label: 'Unpaid Leave',   yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, maxCarryover: 0, unlimited: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'PAT', label: 'Paternity Leave',yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
 ];
 
 function Section({ title, children, defaultOpen = true }) {
@@ -154,6 +154,14 @@ function LeaveTypeCard({ lt, i, onUpdate, onRemove }) {
               <input type="checkbox" checked={lt.carryForward} onChange={e => onUpdate(i, 'carryForward', e.target.checked)} className="rounded w-4 h-4" />
               Carry fwd
             </label>
+            {lt.carryForward && (
+              <div className="w-16">
+                <label className="text-slate-500 text-[10px] block mb-0.5">Max carry</label>
+                <input type="number" min="0" value={lt.maxCarryover || 0}
+                  onChange={e => onUpdate(i, 'maxCarryover', parseInt(e.target.value) || 0)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-slate-100 text-xs focus:outline-none focus:border-blue-500" />
+              </div>
+            )}
             <button onClick={() => onRemove(i)} className="text-red-400 p-1.5 rounded-lg bg-red-500/10 active:bg-red-500/20">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -205,7 +213,7 @@ export default function SettingsPage() {
   });
 
   const addLeaveType = () => setForm(p => ({
-    ...p, leaveTypes: [...p.leaveTypes, { key: '', label: '', yearlyQuota: 0, monthlyQuota: 0, weeklyQuota: 0, color: '#6366f1', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } }]
+    ...p, leaveTypes: [...p.leaveTypes, { key: '', label: '', yearlyQuota: 0, monthlyQuota: 0, weeklyQuota: 0, color: '#6366f1', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } }]
   }));
 
   const updateLeaveType = (i, field, val) => setForm(p => {

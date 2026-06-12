@@ -5,6 +5,7 @@ import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import Company from '../models/Company.js';
 import LeaveBalance from '../models/LeaveBalance.js';
+import { computeCarryover, ensureLeaveBalance } from '../routes/leaveBalance.js';
 import webpush from 'web-push';
 
 export function startScheduler() {
@@ -80,7 +81,6 @@ export function startScheduler() {
           if (lt.unlimited) continue;
           const rule = lt.accrualRule || { frequency: 'yearly', creditDay: 1 };
 
-          // Check if today is a credit day for this frequency
           let shouldCredit = false;
           if (rule.frequency === 'monthly' && day === rule.creditDay) {
             shouldCredit = true;
@@ -93,7 +93,6 @@ export function startScheduler() {
           }
 
           if (shouldCredit) {
-            // Find all users in this company and update their leave balances
             const users = await User.find({ companyId: company._id });
             const totalCredits = (() => {
               if (rule.frequency === 'monthly') return 12;
@@ -104,7 +103,6 @@ export function startScheduler() {
             const perPeriodCredit = lt.yearlyQuota / totalCredits;
 
             for (const user of users) {
-              // Create notification about credited leave
               await Notification.create({
                 userId: user._id,
                 title: `${lt.label} Credited`,
@@ -118,6 +116,26 @@ export function startScheduler() {
       }
     } catch (err) {
       console.error('Leave crediting scheduler error:', err.message);
+    }
+  });
+
+  // Jan 1 at 3 AM — Year-end rollover: create next year's balances with carryover
+  cron.schedule('0 3 1 1 *', async () => {
+    try {
+      const year = new Date().getFullYear();
+      const companies = await Company.find({});
+
+      for (const company of companies) {
+        const users = await User.find({ companyId: company._id });
+        for (const user of users) {
+          // This creates the new year's LeaveBalance with carryover from previous year
+          await ensureLeaveBalance(user._id, year, company);
+        }
+        console.log(`[Year-End] Carryover applied for ${company.name} (${users.length} users)`);
+      }
+      console.log('✅ Year-end rollover complete');
+    } catch (err) {
+      console.error('Year-end rollover error:', err.message);
     }
   });
 
