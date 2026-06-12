@@ -20,7 +20,61 @@ function StatCard({ icon: Icon, label, value, sub, color, bgColor }) {
   );
 }
 
-function LeaveBar({ b, lt }) {
+function CarryoverInput({ b, lt, year, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(b.carried || 0);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await api.post(`/leave-balance/${year}/carryover`, {
+        leaveKey: b.leaveKey,
+        carried: value
+      });
+      onSaved(res.data.carried);
+      setEditing(false);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to save carryover');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Only show for leave types that allow carry forward
+  if (!lt?.carryForward) return null;
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <input
+          type="number" min="0" max={lt.maxCarryover || 99}
+          value={value}
+          onChange={e => setValue(parseInt(e.target.value) || 0)}
+          className="w-14 bg-slate-800 border border-slate-700 rounded-lg px-1.5 py-0.5 text-amber-300 text-[10px] text-center focus:outline-none focus:border-amber-500"
+          autoFocus
+        />
+        <button onClick={handleSave} disabled={saving}
+          className="text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-md hover:bg-emerald-500/20">
+          {saving ? '...' : 'Save'}
+        </button>
+        <button onClick={() => setEditing(false)}
+          className="text-[10px] text-slate-500 px-1 py-0.5 rounded-md hover:text-slate-300">
+          ✕
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => setEditing(true)}
+      className="text-[10px] text-amber-400 bg-amber-500/10 rounded-md px-1.5 py-0.5 hover:bg-amber-500/20 transition">
+      + Add carryover
+    </button>
+  );
+}
+
+function LeaveBar({ b, lt, year, onCarryoverSaved }) {
   const isUnlimited = b.unlimited;
   const accrued = b.accrued || b.total;
   const carried = b.carried || 0;
@@ -60,6 +114,11 @@ function LeaveBar({ b, lt }) {
         <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
           Annual {b.total}
         </span>
+
+        {/* Self-service carryover entry */}
+        {carried === 0 && (
+          <CarryoverInput b={b} lt={lt} year={year} onSaved={onCarryoverSaved} />
+        )}
 
         {b.weeklyQuota > 0 && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
@@ -411,7 +470,27 @@ export default function Dashboard() {
                 const lt = company.leaveTypes?.find(l => l.key === b.leaveKey);
                 // Use the leaveTypes info from balance response for accrual info
                 const ltInfo = balance.leaveTypes?.find(l => l.key === b.leaveKey);
-                return <LeaveBar key={b.leaveKey} b={b} lt={lt || ltInfo} />;
+                return (
+                  <LeaveBar
+                    key={b.leaveKey}
+                    b={b}
+                    lt={lt || ltInfo}
+                    year={year}
+                    onCarryoverSaved={(carried) => {
+                      // Refresh balance to show updated carryover
+                      setBalance(prev => {
+                        if (!prev) return prev;
+                        const newBalances = prev.balances.map(bal => {
+                          if (bal.leaveKey === b.leaveKey) {
+                            return { ...bal, carried };
+                          }
+                          return bal;
+                        });
+                        return { ...prev, balances: newBalances };
+                      });
+                    }}
+                  />
+                );
               })}
             </div>
           </div>

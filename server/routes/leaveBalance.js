@@ -178,6 +178,40 @@ router.get('/:year', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// User self-service: set carryover for a specific leave type
+router.post('/:year/carryover', protect, async (req, res) => {
+  try {
+    const year = parseInt(req.params.year);
+    const { leaveKey, carried } = req.body;
+
+    if (!leaveKey || carried === undefined || carried === null) {
+      return res.status(400).json({ message: 'leaveKey and carried are required' });
+    }
+
+    const company = await Company.findById(req.user.companyId);
+    if (!company) return res.status(404).json({ message: 'Company not found' });
+
+    const ltConfig = company.leaveTypes.find(lt => lt.key === leaveKey);
+    if (!ltConfig) return res.status(400).json({ message: `Leave type "${leaveKey}" not found` });
+    if (!ltConfig.carryForward) return res.status(400).json({ message: 'This leave type does not allow carry forward' });
+
+    // Clamp to max carryover cap
+    const maxCap = ltConfig.maxCarryover || 0;
+    const clampedCarried = maxCap > 0 ? Math.min(Math.max(0, carried), maxCap) : Math.max(0, carried);
+
+    const lb = await LeaveBalance.findOne({ userId: req.user._id, year });
+    if (!lb) return res.status(404).json({ message: 'Leave balance not found for this year' });
+
+    const balanceIdx = lb.balances.findIndex(b => b.leaveKey === leaveKey);
+    if (balanceIdx === -1) return res.status(400).json({ message: `No balance found for "${leaveKey}"` });
+
+    lb.balances[balanceIdx].carried = clampedCarried;
+    await lb.save();
+
+    res.json({ message: `Carryover set to ${clampedCarried} for ${ltConfig.label}`, carried: clampedCarried });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
 router.put('/:year', protect, async (req, res) => {
   try {
     const year = parseInt(req.params.year);
