@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { format, parseISO, isAfter, isBefore, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth } from 'date-fns';
-import { Home, Palmtree, TrendingUp, CalendarCheck, AlertTriangle, LogOut, ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
+import { Home, Palmtree, TrendingUp, CalendarCheck, AlertTriangle, LogOut, ChevronLeft, ChevronRight, CalendarDays, Monitor } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
-import { MONTH_NAMES_FULL, MONTH_NAMES, toDateStr } from '../../utils/dateHelpers.js';
+import { MONTH_NAMES_FULL, MONTH_NAMES, toDateStr, isWeekend } from '../../utils/dateHelpers.js';
 
 function StatCard({ icon: Icon, label, value, sub, color, bgColor }) {
   return (
@@ -22,8 +22,10 @@ function StatCard({ icon: Icon, label, value, sub, color, bgColor }) {
 
 function LeaveBar({ b, lt }) {
   const isUnlimited = b.unlimited;
-  const pct = isUnlimited ? 0 : (b.total ? Math.min(100, (b.used / b.total) * 100) : 0);
-  const remaining = isUnlimited ? '∞' : (b.total - b.used);
+  // Show accrued vs used (instead of total)
+  const accrued = b.accrued || b.total;
+  const pct = isUnlimited ? 0 : (accrued ? Math.min(100, (b.used / accrued) * 100) : 0);
+  const remaining = isUnlimited ? '∞' : Math.max(0, accrued - b.used);
   const color = lt?.color || '#10b981';
   return (
     <div className="space-y-1">
@@ -33,7 +35,7 @@ function LeaveBar({ b, lt }) {
           <span className="text-slate-200 text-sm font-medium">{lt?.label || b.leaveKey}</span>
         </div>
         <span className="text-slate-400 text-xs font-medium">
-          {isUnlimited ? `${b.used} used · ∞` : `${remaining} left / ${b.total}`}
+          {isUnlimited ? `${b.used} used · ∞` : `${remaining} left / ${accrued} accrued`}
         </span>
       </div>
       {!isUnlimited && (
@@ -55,6 +57,12 @@ function LeaveBar({ b, lt }) {
         {isUnlimited && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
             {b.usedThisMonth || 0} days this month
+          </span>
+        )}
+        {/* Show full year total as a subtle reference */}
+        {!isUnlimited && b.total > 0 && b.total !== accrued && (
+          <span className="text-[10px] text-slate-600 bg-slate-700/50 rounded-md px-1.5 py-0.5">
+            Full year: {b.total}
           </span>
         )}
       </div>
@@ -87,7 +95,7 @@ function MiniCalendar({ year, month, holidays, entries }) {
           if (!date) return <div key={i} />;
           const ds = toDateStr(date);
           const dow = getDay(date);
-          const isWeekend = dow === 0 || dow === 6;
+          const isWeekendDay = dow === 0 || dow === 6;
           const isHoliday = holidayDates.has(ds);
           const entry = entryMap[ds];
           const isToday = ds === today;
@@ -97,7 +105,8 @@ function MiniCalendar({ year, month, holidays, entries }) {
               ${isHoliday ? 'bg-violet-500/20 text-violet-300' :
                 entry?.type === 'WFH' ? 'bg-blue-500/20 text-blue-300' :
                   entry?.type === 'LEAVE' ? 'bg-emerald-500/20 text-emerald-300' :
-                    isWeekend ? 'text-slate-600' : 'text-slate-400'}`}>
+                    entry?.type === 'REMOTE' ? 'bg-orange-500/20 text-orange-300' :
+                      isWeekendDay ? 'text-slate-600' : 'text-slate-400'}`}>
               {date.getDate()}
               {isHoliday && <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-violet-400 rounded-full" />}
             </div>
@@ -142,12 +151,10 @@ function HolidayCalendar({ holidays, entries }) {
   });
 
   return (
-    // Fixed height — never shrinks or grows between tabs or pages
     <div
       className="bg-slate-800 rounded-2xl border border-slate-700 flex flex-col overflow-hidden"
       style={{ height: '32rem' }}
     >
-      {/* Header */}
       <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-violet-400" />
@@ -165,14 +172,9 @@ function HolidayCalendar({ holidays, entries }) {
         </div>
       </div>
 
-      {/* Body — fills remaining fixed height, no overflow-hidden so nothing clips */}
       <div className="flex-1 flex flex-col p-4 min-h-0">
-
         {tab === 'calendar' ? (
-          // flex-col + h-full so legend is always last and never hidden
           <div className="flex flex-col h-full">
-
-            {/* Month nav */}
             <div className="flex items-center justify-between flex-shrink-0 mb-3">
               <button onClick={() => navigate(-1)} className="p-1.5 rounded-lg bg-slate-700 text-slate-400 active:bg-slate-600">
                 <ChevronLeft className="w-3.5 h-3.5" />
@@ -184,8 +186,6 @@ function HolidayCalendar({ holidays, entries }) {
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
-
-            {/* Calendar grid */}
             <div className="flex-1 min-h-0">
               <MiniCalendar
                 year={viewYear}
@@ -194,13 +194,12 @@ function HolidayCalendar({ holidays, entries }) {
                 entries={monthEntries}
               />
             </div>
-
-            {/* Legend — flex-shrink-0 so it is NEVER clipped regardless of how many rows the month has */}
             <div className="flex gap-3 pt-2 flex-wrap flex-shrink-0">
               {[
                 { color: 'bg-violet-500/50', label: 'Holiday' },
                 { color: 'bg-blue-500/50', label: 'WFH' },
                 { color: 'bg-emerald-500/50', label: 'Leave' },
+                { color: 'bg-orange-500/50', label: 'Remote' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5 text-[10px] text-slate-500">
                   <div className={`w-2.5 h-2.5 rounded ${l.color}`} />{l.label}
@@ -208,15 +207,11 @@ function HolidayCalendar({ holidays, entries }) {
               ))}
             </div>
           </div>
-
         ) : (
-          // List tab — h-full + flex-col, pagination always pinned to bottom via mt-auto
           <div className="flex flex-col h-full">
-
             <p className="text-slate-500 text-[10px] uppercase tracking-wider font-semibold mb-2 flex-shrink-0">
               {upcomingAll.length} upcoming holiday{upcomingAll.length !== 1 ? 's' : ''}
             </p>
-
             {upcomingAll.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center">
                 <CalendarDays className="w-8 h-8 text-slate-700 mb-2" />
@@ -224,7 +219,6 @@ function HolidayCalendar({ holidays, entries }) {
               </div>
             ) : (
               <>
-                {/* No scroll — items stack naturally, empty space shows below if fewer than PAGE_SIZE */}
                 <div className="space-y-2 flex-shrink-0">
                   {pageItems.map((h, i) => {
                     const d = parseISO(h.date);
@@ -261,8 +255,6 @@ function HolidayCalendar({ holidays, entries }) {
                     );
                   })}
                 </div>
-
-                {/* mt-auto pins pagination to bottom regardless of item count on the page */}
                 <div className="mt-auto pt-3 border-t border-slate-700/60 flex items-center justify-between flex-shrink-0">
                   <button
                     onClick={() => setPage(p => Math.max(0, p - 1))}
@@ -322,15 +314,36 @@ export default function Dashboard() {
   }, []);
 
   const wfhThisMonth = monthEntries.filter(e => e.type === 'WFH').length;
+  const remoteThisMonth = monthEntries.filter(e => e.type === 'REMOTE').length;
   const leaveThisMonth = monthEntries.filter(e => e.type === 'LEAVE').length;
+  const holidayThisMonth = monthEntries.filter(e => e.type === 'HOLIDAY').length;
   const wfhQuota = company?.wfhPerMonth || 8;
   const today = toDateStr(now);
 
+  // Compute office days: working days this month - wfh - remote - leave - holidays
+  const workingDays = company?.workingDays || [1, 2, 3, 4, 5];
+  const monthStart = startOfMonth(now);
+  const monthEnd = endOfMonth(now);
+  const allDaysThisMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const totalWorkingDaysThisMonth = allDaysThisMonth.filter(d => {
+    const dow = getDay(d);
+    const isoDow = dow === 0 ? 7 : dow;
+    return workingDays.includes(isoDow);
+  }).length;
+
+  const holidays = company?.publicHolidays?.map(h => h.date) || [];
+  const holidayDatesThisMonth = new Set([
+    ...holidays.filter(h => h.startsWith(`${year}-${String(month).padStart(2, '0')}`)),
+    ...monthEntries.filter(e => e.type === 'HOLIDAY').map(e => e.date)
+  ]);
+
+  const officeDays = totalWorkingDaysThisMonth - wfhThisMonth - remoteThisMonth - leaveThisMonth - holidayDatesThisMonth.size;
+
   const upcoming = allEntries
-    .filter(e => e.date >= today && ['WFH', 'LEAVE', 'HOLIDAY'].includes(e.type))
+    .filter(e => e.date >= today && ['WFH', 'LEAVE', 'HOLIDAY', 'REMOTE'].includes(e.type))
     .slice(0, 5);
 
-  const TYPE_DOT = { WFH: 'bg-blue-500', LEAVE: 'bg-emerald-500', HOLIDAY: 'bg-violet-500' };
+  const TYPE_DOT = { WFH: 'bg-blue-500', LEAVE: 'bg-emerald-500', HOLIDAY: 'bg-violet-500', REMOTE: 'bg-orange-500' };
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -359,8 +372,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={Home} label="WFH This Month" value={wfhThisMonth} sub={`of ${wfhQuota} quota`} color="text-blue-400" bgColor="bg-blue-500/10" />
         <StatCard icon={CalendarCheck} label="WFH Remaining" value={wfhQuota - wfhThisMonth} sub="days left" color="text-cyan-400" bgColor="bg-cyan-500/10" />
-        <StatCard icon={Palmtree} label="Leaves Taken" value={leaveThisMonth} sub="this month" color="text-emerald-400" bgColor="bg-emerald-500/10" />
-        <StatCard icon={TrendingUp} label="Office Days" value={monthEntries.filter(e => e.type === 'OFFICE').length} sub="logged" color="text-violet-400" bgColor="bg-violet-500/10" />
+        <StatCard icon={Monitor} label="Remote Days" value={remoteThisMonth} sub="this month" color="text-orange-400" bgColor="bg-orange-500/10" />
+        <StatCard icon={TrendingUp} label="Office Days" value={officeDays} sub={`of ${totalWorkingDaysThisMonth} working days`} color="text-violet-400" bgColor="bg-violet-500/10" />
       </div>
 
       {/* WFH quota bar */}
@@ -385,7 +398,9 @@ export default function Dashboard() {
             <div className="space-y-4">
               {balance.balances?.map(b => {
                 const lt = company.leaveTypes?.find(l => l.key === b.leaveKey);
-                return <LeaveBar key={b.leaveKey} b={b} lt={lt} />;
+                // Use the leaveTypes info from balance response for accrual info
+                const ltInfo = balance.leaveTypes?.find(l => l.key === b.leaveKey);
+                return <LeaveBar key={b.leaveKey} b={b} lt={lt || ltInfo} />;
               })}
             </div>
           </div>
@@ -399,7 +414,7 @@ export default function Dashboard() {
       <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
         <h2 className="text-white font-semibold mb-3 text-sm">Upcoming Schedule</h2>
         {upcoming.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-4">No upcoming WFH or leave scheduled.</p>
+          <p className="text-slate-500 text-sm text-center py-4">No upcoming WFH, Remote, or leave scheduled.</p>
         ) : (
           <div className="space-y-2">
             {upcoming.map(e => {
@@ -412,6 +427,7 @@ export default function Dashboard() {
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg flex-shrink-0
                     ${e.type === 'WFH' ? 'bg-blue-500/20 text-blue-300' :
+                      e.type === 'REMOTE' ? 'bg-orange-500/20 text-orange-300' :
                       e.type === 'LEAVE' ? 'bg-emerald-500/20 text-emerald-300' :
                         'bg-violet-500/20 text-violet-300'}`}>
                     {e.type}{e.leaveType ? ` · ${e.leaveType}` : ''}

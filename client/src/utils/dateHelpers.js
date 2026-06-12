@@ -10,6 +10,7 @@ export const TYPE_CONFIG = {
   OFFICE:  { label: 'Office',  color: '#6b7280', bg: 'bg-gray-500/20',   border: 'border-gray-500',   text: 'text-gray-400',   dot: '#6b7280' },
   LEAVE:   { label: 'Leave',   color: '#10b981', bg: 'bg-emerald-500/20', border: 'border-emerald-500',text: 'text-emerald-400', dot: '#10b981' },
   HOLIDAY: { label: 'Holiday', color: '#8b5cf6', bg: 'bg-violet-500/20', border: 'border-violet-500', text: 'text-violet-400', dot: '#8b5cf6' },
+  REMOTE:  { label: 'Remote',  color: '#f97316', bg: 'bg-orange-500/20', border: 'border-orange-500', text: 'text-orange-400', dot: '#f97316' },
 };
 
 export const LEAVE_COLORS = {

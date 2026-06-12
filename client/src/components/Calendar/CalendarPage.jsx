@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Wand2, Trash2, X, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Wand2, Trash2, X, AlertTriangle, Monitor } from 'lucide-react';
 import { useCalendar } from '../../hooks/useCalendar.js';
 import { useToast } from '../Layout/Toast.jsx';
 import { getCalendarGrid, DAY_NAMES, toDateStr, TYPE_CONFIG, MONTH_NAMES_FULL, isWeekend } from '../../utils/dateHelpers.js';
 import api from '../../utils/api.js';
 
-const TYPES = ['WFH', 'LEAVE', 'HOLIDAY', 'OFFICE'];
+const TYPES = ['WFH', 'LEAVE', 'HOLIDAY', 'REMOTE', 'OFFICE'];
 
 function DayCell({ date, entry, company, onClick, today }) {
   if (!date) return <div className="aspect-square bg-slate-900/20 rounded-lg lg:h-20" />;
@@ -15,12 +15,18 @@ function DayCell({ date, entry, company, onClick, today }) {
   const weekend = isWeekend(date);
   const holiday = company?.publicHolidays?.find(h => h.date === ds);
   const cfg = entry ? TYPE_CONFIG[entry.type] : null;
+  const isWorkingDay = company?.workingDays?.includes(date.getDay() === 0 ? 7 : date.getDay());
+
+  // Default to "In Office" if no entry, not weekend, not holiday, and is a working day
+  const defaultOffice = !entry && !weekend && !holiday && isWorkingDay;
 
   return (
     <div onClick={() => onClick(date, entry)}
       className={`aspect-square lg:aspect-auto lg:h-20 rounded-lg lg:rounded-xl border cursor-pointer transition-all active:scale-95 lg:hover:scale-[1.02] relative overflow-hidden select-none
         ${isToday ? 'ring-2 ring-blue-500' : ''}
-        ${weekend && !entry ? 'bg-slate-800/30 border-slate-700/30' : !entry ? 'bg-slate-800 border-slate-700' : `${cfg.bg} ${cfg.border}`}
+        ${weekend && !entry ? 'bg-slate-800/30 border-slate-700/30' : 
+          defaultOffice ? 'bg-slate-800/60 border-slate-700/30' :
+          !entry ? 'bg-slate-800 border-slate-700' : `${cfg.bg} ${cfg.border}`}
       `}>
       <div className="p-1 lg:p-2 h-full flex flex-col">
         <span className={`text-[10px] lg:text-xs font-bold ${isToday ? 'text-blue-400' : weekend ? 'text-slate-600' : 'text-slate-300'}`}>
@@ -37,6 +43,16 @@ function DayCell({ date, entry, company, onClick, today }) {
               {entry.type}{entry.leaveType ? ` · ${entry.leaveType}` : ''}
             </span>
             {entry.note && <span className="text-[9px] text-slate-500 block truncate">{entry.note}</span>}
+          </div>
+        )}
+        {defaultOffice && (
+          <div className="hidden lg:block mt-1">
+            <span className="text-[10px] text-slate-500/70 block truncate">In Office</span>
+          </div>
+        )}
+        {defaultOffice && (
+          <div className="flex-1 flex items-end justify-center lg:hidden">
+            <div className="w-1 h-1 rounded-full bg-slate-600/50" />
           </div>
         )}
         {holiday && !entry && (
@@ -61,31 +77,26 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
   const [note, setNote] = useState(entry?.note || '');
   const [loading, setLoading] = useState(false);
   const [warnings, setWarnings] = useState([]);
-  const [pendingSave, setPendingSave] = useState(false); // true = warnings shown, next click force-saves
+  const [pendingSave, setPendingSave] = useState(false);
 
   const doSave = async (force = false) => {
-    // If warnings already shown and user clicks "Save Anyway" — proceed and close
     if (warnings.length > 0 && !force) {
-      // Show them again if they somehow re-click Save before choosing
       return;
     }
     setLoading(true);
     try {
       const result = await onSave(toDateStr(date), type, leaveType || undefined, note || undefined);
       if (result?.warnings?.length && !pendingSave) {
-        // First time — show warnings, don't close yet
         setWarnings(result.warnings);
         setPendingSave(true);
         setLoading(false);
         return;
       }
-      // Either no warnings or user already saw them — close
       toast.success('Saved', `${type} set for ${format(date, 'MMM d')}`);
       onClose();
     } catch (err) {
       const msg = err.response?.data?.message || 'Error saving';
       toast.error('Could not save', msg);
-      // Do NOT close — let user fix or cancel
     } finally {
       setLoading(false);
     }
@@ -93,7 +104,6 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
 
   const handleSaveClick = () => {
     if (pendingSave) {
-      // User clicked "Save Anyway" after warnings — force save (warnings already exist on DB side, just close)
       toast.warning('Saved with warnings', `${type} saved despite preference mismatch`);
       onClose();
     } else {
@@ -118,7 +128,6 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
     <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full lg:max-w-md bg-slate-800 rounded-t-3xl lg:rounded-2xl border border-slate-700 shadow-2xl mb-16 lg:mb-0">
-        {/* Handle */}
         <div className="flex justify-center pt-3 pb-1 lg:hidden">
           <div className="w-10 h-1 bg-slate-600 rounded-full" />
         </div>
@@ -134,7 +143,6 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Warnings */}
           {warnings.length > 0 && (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 space-y-2">
               {warnings.map((w, i) => (
@@ -207,6 +215,7 @@ export default function CalendarPage() {
 
   const grid = getCalendarGrid(year, month);
   const wfhCount = Object.values(entryMap).filter(e => e.type === 'WFH').length;
+  const remoteCount = Object.values(entryMap).filter(e => e.type === 'REMOTE').length;
   const quota = company?.wfhPerMonth || 8;
 
   const navigate = (dir) => {
@@ -243,7 +252,10 @@ export default function CalendarPage() {
             <h1 className="text-base lg:text-xl font-bold text-white leading-tight">
               {MONTH_NAMES_FULL[month-1]} {year}
             </h1>
-            <p className="text-slate-500 text-xs">{wfhCount}/{quota} WFH days</p>
+            <div className="flex items-center justify-center lg:justify-start gap-3 text-xs text-slate-500">
+              <span>{wfhCount}/{quota} WFH</span>
+              {remoteCount > 0 && <span>· {remoteCount} Remote</span>}
+            </div>
           </div>
           <button onClick={() => navigate(1)} className="p-2 bg-slate-800 rounded-xl text-slate-400 active:bg-slate-700">
             <ChevronRight className="w-5 h-5" />

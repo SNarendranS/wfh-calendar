@@ -9,6 +9,74 @@ import { checkWfhWarning, suggestBestWfhDays } from '../utils/wfhLogic.js';
 
 const router = express.Router();
 
+/**
+ * Calculate accrued (earned) amount for a leave type given current date.
+ */
+function getCreditsSoFar(frequency, creditDay, year) {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  if (currentYear > year) {
+    if (frequency === 'monthly') return 12;
+    if (frequency === 'quarterly') return 4;
+    if (frequency === 'halfYearly') return 2;
+    return 1;
+  }
+  if (currentYear < year) return 0;
+
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
+
+  if (frequency === 'monthly') {
+    let credits = 0;
+    for (let m = 1; m <= 12; m++) {
+      if (m < month) { credits++; }
+      else if (m === month) { if (day >= creditDay) credits++; }
+    }
+    return credits;
+  }
+
+  if (frequency === 'quarterly') {
+    const quarters = [1, 4, 7, 10];
+    let credits = 0;
+    for (const qMonth of quarters) {
+      if (qMonth < month) credits++;
+      else if (qMonth === month && day >= creditDay) credits++;
+    }
+    return credits;
+  }
+
+  if (frequency === 'halfYearly') {
+    const halfs = [1, 7];
+    let credits = 0;
+    for (const hMonth of halfs) {
+      if (hMonth < month) credits++;
+      else if (hMonth === month && day >= creditDay) credits++;
+    }
+    return credits;
+  }
+
+  if (month > 1 || (month === 1 && day >= creditDay)) return 1;
+  return 0;
+}
+
+function getAccrued(leaveType, year) {
+  if (leaveType.unlimited) return Infinity;
+  const { frequency, creditDay } = leaveType.accrualRule || { frequency: 'yearly', creditDay: 1 };
+  const totalQuota = leaveType.yearlyQuota || 0;
+  const creditsSoFar = getCreditsSoFar(frequency, creditDay, year);
+  if (creditsSoFar === 0) return 0;
+
+  const totalCredits = (() => {
+    if (frequency === 'monthly') return 12;
+    if (frequency === 'quarterly') return 4;
+    if (frequency === 'halfYearly') return 2;
+    return 1;
+  })();
+
+  const perPeriod = totalQuota / totalCredits;
+  return Math.min(totalQuota, Math.floor(creditsSoFar * perPeriod));
+}
+
 // Get entries for a year or month
 router.get('/', protect, async (req, res) => {
   try {
@@ -31,11 +99,31 @@ router.post('/', protect, async (req, res) => {
     const year = dateObj.getFullYear();
     const month = dateObj.getMonth() + 1;
 
-    // Get company for warnings
+    // Get company for warnings and leave type config
     const company = await Company.findById(req.user.companyId);
     const holidays = company?.publicHolidays || [];
 
     let warnings = [];
+
+    // Validate leave against accrued balance
+    if (type === 'LEAVE' && leaveType) {
+      const ltConfig = company?.leaveTypes?.find(l => l.key === leaveType);
+      if (ltConfig && !ltConfig.unlimited) {
+        const lb = await LeaveBalance.findOne({ userId: req.user._id, year });
+        const balance = lb?.balances?.find(b => b.leaveKey === leaveType);
+        const accrued = getAccrued(ltConfig, year);
+        const used = (balance?.used || 0);
+
+        // Check if applying this leave would exceed accrued
+        const existingEntry = await CalendarEntry.findOne({ userId: req.user._id, date });
+        const isNew = !existingEntry || existingEntry.type !== 'LEAVE' || existingEntry.leaveType !== leaveType;
+        if (isNew && used >= accrued) {
+          return res.status(400).json({
+            message: `Insufficient accrued leave. You have used ${used}/${accrued} ${ltConfig.label} leaves so far. More leaves will be credited on the next cycle (${ltConfig.accrualRule?.frequency || 'yearly'}).`
+          });
+        }
+      }
+    }
 
     if (type === 'WFH') {
       // Check monthly WFH quota
@@ -143,7 +231,7 @@ router.get('/suggest-wfh', protect, async (req, res) => {
       remaining,
       company?.publicHolidays || [],
       existingWfh,
-      blockedDates  // ← new param
+      blockedDates
     );
     res.json({ suggestions });
   } catch (err) { res.status(500).json({ message: err.message }); }

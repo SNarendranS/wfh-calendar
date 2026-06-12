@@ -10,12 +10,19 @@ const DAY_OPTIONS = [
 
 const PRESET_COLORS = ['#3b82f6','#10b981','#f59e0b','#ec4899','#8b5cf6','#06b6d4','#f97316','#84cc16','#6b7280','#14b8a6'];
 
+const ACCRUAL_FREQUENCIES = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'halfYearly', label: 'Half-Yearly' },
+  { value: 'yearly', label: 'Yearly' },
+];
+
 const DEFAULT_LEAVE_TYPES = [
-  { key: 'PL',  label: 'Paid Leave',     yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true,  unlimited: false },
-  { key: 'ML',  label: 'Medical Leave',  yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, unlimited: false },
-  { key: 'EL',  label: 'Election Leave', yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, unlimited: false },
-  { key: 'UL',  label: 'Unpaid Leave',   yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, unlimited: true  },
-  { key: 'PAT', label: 'Paternity Leave',yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, unlimited: false },
+  { key: 'PL',  label: 'Paid Leave',     yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true,  unlimited: false, accrualRule: { frequency: 'monthly', creditDay: 30 } },
+  { key: 'ML',  label: 'Medical Leave',  yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, unlimited: false, accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
+  { key: 'EL',  label: 'Election Leave', yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'UL',  label: 'Unpaid Leave',   yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, unlimited: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'PAT', label: 'Paternity Leave',yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
 ];
 
 function Section({ title, children, defaultOpen = true }) {
@@ -101,6 +108,35 @@ function LeaveTypeCard({ lt, i, onUpdate, onRemove }) {
         </div>
         <p className="text-slate-600 text-[10px] -mt-1">Set month/week to 0 for no cap on that period.</p>
 
+        {/* Accrual Rule */}
+        <div className="bg-slate-800/50 rounded-lg p-2.5 border border-slate-700/50">
+          <p className="text-slate-400 text-[10px] font-semibold mb-2 uppercase tracking-wider">Accrual Rule</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-slate-500 text-[10px] block mb-1">Frequency</label>
+              <select value={lt.accrualRule?.frequency || 'yearly'} 
+                onChange={e => onUpdate(i, 'accrualRule', { ...lt.accrualRule, frequency: e.target.value })}
+                disabled={lt.unlimited}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100 text-xs focus:outline-none focus:border-blue-500 disabled:opacity-30">
+                {ACCRUAL_FREQUENCIES.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-slate-500 text-[10px] block mb-1">Credit Day</label>
+              <input type="number" min="1" max="31" value={lt.accrualRule?.creditDay || 1}
+                onChange={e => onUpdate(i, 'accrualRule', { ...lt.accrualRule, creditDay: parseInt(e.target.value) || 1 })}
+                disabled={lt.unlimited}
+                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100 text-xs focus:outline-none focus:border-blue-500 disabled:opacity-30" />
+            </div>
+          </div>
+          <p className="text-slate-600 text-[10px] mt-1.5">
+            {lt.accrualRule?.frequency === 'monthly' ? `Credits ${(lt.yearlyQuota / 12).toFixed(1)} leaves on day ${lt.accrualRule?.creditDay || 1} each month` :
+             lt.accrualRule?.frequency === 'quarterly' ? `Credits ${(lt.yearlyQuota / 4).toFixed(1)} leaves on day ${lt.accrualRule?.creditDay || 1} of Jan, Apr, Jul, Oct` :
+             lt.accrualRule?.frequency === 'halfYearly' ? `Credits ${(lt.yearlyQuota / 2).toFixed(1)} leaves on day ${lt.accrualRule?.creditDay || 1} of Jan & Jul` :
+             `Credits ${lt.yearlyQuota} leaves on Jan ${lt.accrualRule?.creditDay || 1}`}
+          </p>
+        </div>
+
         {/* Color + options row */}
         <div className="flex items-start justify-between gap-2 flex-wrap">
           <div>
@@ -169,7 +205,7 @@ export default function SettingsPage() {
   });
 
   const addLeaveType = () => setForm(p => ({
-    ...p, leaveTypes: [...p.leaveTypes, { key: '', label: '', yearlyQuota: 0, monthlyQuota: 0, weeklyQuota: 0, color: '#6366f1', carryForward: false, unlimited: false }]
+    ...p, leaveTypes: [...p.leaveTypes, { key: '', label: '', yearlyQuota: 0, monthlyQuota: 0, weeklyQuota: 0, color: '#6366f1', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } }]
   }));
 
   const updateLeaveType = (i, field, val) => setForm(p => {

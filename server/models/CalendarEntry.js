@@ -5,7 +5,7 @@ const calendarEntrySchema = new mongoose.Schema({
   date: { type: String, required: true }, // YYYY-MM-DD
   type: {
     type: String,
-    enum: ['WFH', 'LEAVE', 'HOLIDAY', 'OFFICE'],
+    enum: ['WFH', 'LEAVE', 'HOLIDAY', 'OFFICE', 'REMOTE'],
     required: true
   },
   leaveType: { type: String }, // PL, ML, EL etc - only if type=LEAVE
