@@ -215,11 +215,16 @@ export default function ProfilePage() {
 
         {/* Quick actions */}
         <div className="px-6 py-3 flex gap-2">
-          {!isOwn && profile.followStatus === 'accepted' && (
+          {!isOwn && (profile.followStatus === 'accepted' || profile.visibility === 'public') && (
             <Link to={`/calendar/${profile._id}`}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600/20 text-blue-400 text-sm font-medium hover:bg-blue-600/30 transition">
               <CalendarDays className="w-4 h-4" /> View Calendar
             </Link>
+          )}
+          {!isOwn && profile.followStatus === 'pending' && (
+            <span className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-700/50 text-slate-500 text-sm font-medium cursor-not-allowed">
+              <CalendarDays className="w-4 h-4" /> Awaiting approval
+            </span>
           )}
         </div>
       </div>

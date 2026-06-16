@@ -16,19 +16,34 @@ export default function LoginPage() {
   const { login, register, sendOtp, verifyOtp, sendLoginOtp, loginWithOtp } = useAuth();
   const navigate = useNavigate();
 
+  const [regStep, setRegStep] = useState('form'); // 'form' | 'otp'
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); setLoading(true);
-    try {
-      if (mode === 'login') {
+    setError('');
+    if (mode === 'login') {
+      setLoading(true);
+      try {
         await login(form.email, form.password);
-      } else {
-        await register(form.username, form.email, form.password, form.companyName);
+        navigate('/');
+      } catch (err) {
+        setError(err.response?.data?.message || 'Something went wrong');
+      } finally { setLoading(false); }
+    } else {
+      // Registration: first send OTP, show OTP step
+      if (!form.email || !form.password || !form.username) {
+        setError('Please fill in all required fields');
+        return;
       }
-      navigate('/');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Something went wrong');
-    } finally { setLoading(false); }
+      setOtpLoading(true);
+      try {
+        await sendOtp(form.email, 'email_verification');
+        setRegStep('otp');
+        setOtpSent(true);
+      } catch (err) {
+        setError(err.response?.data?.message || 'Failed to send verification code');
+      } finally { setOtpLoading(false); }
+    }
   };
 
   const handleSendOtp = async () => {
@@ -57,17 +72,17 @@ export default function LoginPage() {
     } finally { setLoading(false); }
   };
 
-  const handleOtpRegister = async () => {
+  const handleRegisterWithOtp = async () => {
     if (!otp) { setError('Enter the OTP'); return; }
+    if (!form.username) { setError('Username is required'); return; }
+    if (!form.password) { setError('Password is required'); return; }
     setError(''); setLoading(true);
     try {
-      // Verify OTP first
-      await verifyOtp(form.email, otp, 'email_verification');
-      // Then register with OTP verified
-      await register(form.username, form.email, form.password, form.companyName);
+      // Register with OTP — server will verify it
+      await register(form.username, form.email, form.password, form.companyName, otp);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Verification failed');
+      setError(err.response?.data?.message || 'Registration failed');
     } finally { setLoading(false); }
   };
 
@@ -136,18 +151,9 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* PASSWORD AUTH */}
-          {authTab === 'password' && (
+          {/* PASSWORD AUTH / REGISTRATION */}
+          {authTab === 'password' && mode === 'login' && (
             <form onSubmit={handleSubmit} className="space-y-3">
-              {mode === 'register' && (
-                <>
-                  <input className={inp} placeholder="Username" value={form.username}
-                    onChange={e => setForm(p => ({ ...p, username: e.target.value }))} required
-                    autoCapitalize="none" autoCorrect="off" />
-                  <input className={inp} placeholder="Company Name (optional)" value={form.companyName}
-                    onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} />
-                </>
-              )}
               <input className={inp} type="email" placeholder="Email" value={form.email}
                 onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required
                 inputMode="email" autoCapitalize="none" />
@@ -163,20 +169,75 @@ export default function LoginPage() {
                 className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition flex items-center justify-center gap-2 text-base mt-2">
                 {loading
                   ? <span className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
-                  : mode === 'login'
-                    ? <><LogIn className="w-4 h-4" />Sign In</>
-                    : <><UserPlus className="w-4 h-4" />Create Account</>
-                }
+                  : <><LogIn className="w-4 h-4" />Sign In</>}
               </button>
+              <div className="text-center mt-3">
+                <Link to="/forgot-password" className="text-blue-400 text-xs hover:text-blue-300 transition">
+                  Forgot password?
+                </Link>
+              </div>
+            </form>
+          )}
 
-              {mode === 'login' && (
-                <div className="text-center mt-3">
-                  <Link to="/forgot-password" className="text-blue-400 text-xs hover:text-blue-300 transition">
-                    Forgot password?
-                  </Link>
+          {/* REGISTRATION FLOW with OTP */}
+          {mode === 'register' && (
+            <div className="space-y-3">
+              {regStep === 'form' && (
+                <form onSubmit={handleSubmit} className="space-y-3">
+                  <input className={inp} placeholder="Username" value={form.username}
+                    onChange={e => setForm(p => ({ ...p, username: e.target.value }))} required
+                    autoCapitalize="none" autoCorrect="off" />
+                  <input className={inp} placeholder="Company Name (optional)" value={form.companyName}
+                    onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} />
+                  <input className={inp} type="email" placeholder="Email" value={form.email}
+                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))} required
+                    inputMode="email" autoCapitalize="none" />
+                  <div className="relative">
+                    <input className={inp} type={showPw ? 'text' : 'password'} placeholder="Password"
+                      value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} required />
+                    <button type="button" onClick={() => setShowPw(!showPw)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 p-1">
+                      {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <button type="submit" disabled={otpLoading}
+                    className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition flex items-center justify-center gap-2 text-base mt-2">
+                    {otpLoading
+                      ? <span className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                      : <><Mail className="w-4 h-4" />Send Verification Code</>}
+                  </button>
+                </form>
+              )}
+
+              {regStep === 'otp' && (
+                <div className="space-y-3">
+                  <div className="text-center">
+                    <p className="text-emerald-400 text-sm font-medium mb-1">✓ Code sent!</p>
+                    <p className="text-slate-400 text-xs mb-1">Enter the 6-digit code sent to</p>
+                    <p className="text-slate-200 text-sm font-medium">{form.email}</p>
+                  </div>
+                  <input className={`${inp} text-center tracking-widest text-lg font-mono`}
+                    placeholder="000000" maxLength={6} value={otp}
+                    onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric" autoFocus />
+                  <button onClick={handleRegisterWithOtp} disabled={loading || otp.length !== 6}
+                    className="w-full bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition flex items-center justify-center gap-2 text-base">
+                    {loading
+                      ? <span className="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full" />
+                      : <><UserPlus className="w-4 h-4" />Verify & Create Account</>}
+                  </button>
+                  <div className="flex justify-between text-xs">
+                    <button onClick={() => setRegStep('form')} className="text-slate-500 hover:text-slate-300">
+                      ← Edit details
+                    </button>
+                    <button onClick={handleSendOtp} disabled={otpLoading}
+                      className="text-blue-400 hover:text-blue-300">
+                      {otpLoading ? 'Sending...' : 'Resend code'}
+                    </button>
+                  </div>
                 </div>
               )}
-            </form>
+            </div>
           )}
 
           {/* OTP AUTH (Login only) */}
