@@ -3,18 +3,60 @@ import webpush from 'web-push';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
+import { addSseClient } from '../utils/notificationManager.js';
 
 const router = express.Router();
+
+// SSE: Stream notifications in real-time
+router.get('/stream', protect, async (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  // Send initial heartbeat
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+  addSseClient(req.user._id.toString(), res);
+
+  // Keep-alive every 30s
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(`:keepalive\n\n`);
+    } catch {
+      clearInterval(keepAlive);
+    }
+  }, 30000);
+
+  req.on('close', () => clearInterval(keepAlive));
+});
 
 // Get notifications
 router.get('/', protect, async (req, res) => {
   try {
-    const { unreadOnly, limit = 50 } = req.query;
+    const { unreadOnly, limit = 50, category } = req.query;
     const filter = { userId: req.user._id };
     if (unreadOnly === 'true') filter.read = false;
-    const notifications = await Notification.find(filter).sort({ createdAt: -1 }).limit(parseInt(limit));
+    if (category && category !== 'all') filter.category = category;
+
+    const notifications = await Notification.find(filter)
+      .populate('fromUser', 'username displayName avatar')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit));
+
     const unreadCount = await Notification.countDocuments({ userId: req.user._id, read: false });
-    res.json({ notifications, unreadCount });
+
+    // Count per category
+    const categoryCounts = await Notification.aggregate([
+      { $match: { userId: req.user._id, read: false } },
+      { $group: { _id: '$category', count: { $sum: 1 } } }
+    ]);
+    const counts = { all: unreadCount };
+    categoryCounts.forEach(c => { counts[c._id] = c.count; });
+
+    res.json({ notifications, unreadCount, categoryCounts: counts });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
@@ -29,7 +71,10 @@ router.patch('/:id/read', protect, async (req, res) => {
 // Mark all as read
 router.patch('/read-all', protect, async (req, res) => {
   try {
-    await Notification.updateMany({ userId: req.user._id, read: false }, { read: true });
+    const { category } = req.body;
+    const filter = { userId: req.user._id, read: false };
+    if (category && category !== 'all') filter.category = category;
+    await Notification.updateMany(filter, { read: true });
     res.json({ message: 'All marked as read' });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });

@@ -6,7 +6,6 @@ const links = [
   { to: '/',              icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/calendar',      icon: CalendarDays,    label: 'Calendar'  },
   { to: '/search',        icon: Search,          label: 'Find People' },
-  { to: '/follow-requests', icon: UserPlus,     label: 'Requests'  },
   { to: '/notifications', icon: Bell,            label: 'Alerts'    },
   { to: '/profile',       icon: User,            label: 'Profile'   },
   { to: '/settings',      icon: Settings,        label: 'Settings'  },

@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company' },
   // Profile fields
+  bookmarkedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // Profile fields
   displayName: { type: String, trim: true },
   avatar: { type: String, default: '' },
   bio: { type: String, default: '', maxlength: 500 },

@@ -9,9 +9,20 @@ const notificationSchema = new mongoose.Schema({
     enum: ['INFO', 'WARNING', 'SUCCESS', 'REMINDER'],
     default: 'INFO'
   },
+  category: {
+    type: String,
+    enum: ['system', 'follow_request', 'warning', 'reminder', 'schedule'],
+    default: 'system'
+  },
+  fromUser: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   relatedDate: { type: String },
   read: { type: Boolean, default: false },
-  actionUrl: { type: String }
+  actionUrl: { type: String },
+  actionable: { type: Boolean, default: false },
+  actionData: { type: Object }
 }, { timestamps: true });
+
+notificationSchema.index({ userId: 1, createdAt: -1 });
+notificationSchema.index({ userId: 1, category: 1, read: 1 });
 
 export default mongoose.model('Notification', notificationSchema);

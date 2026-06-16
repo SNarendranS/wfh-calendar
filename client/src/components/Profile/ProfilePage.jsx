@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Settings, ArrowLeft, CalendarDays, UserPlus, UserCheck, UserX, Users, Clock, Globe, Lock, Eye, EyeOff, Save, RefreshCw, Camera } from 'lucide-react';
+import { Settings, ArrowLeft, CalendarDays, UserPlus, UserCheck, UserX, Users, Clock, Globe, Lock, Eye, EyeOff, Save, RefreshCw, Camera, Star } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useToast } from '../Layout/Toast.jsx';
 import api from '../../utils/api.js';
@@ -54,6 +54,41 @@ function FollowButton({ userId, initialStatus, onUpdate }) {
     <button onClick={handleFollow} disabled={loading}
       className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition active:scale-95">
       <UserPlus className="w-4 h-4" /> Follow
+    </button>
+  );
+}
+
+function BookmarkButton({ userId, initialBookmarked }) {
+  const [bookmarked, setBookmarked] = useState(initialBookmarked);
+  const [loading, setLoading] = useState(false);
+  const toast = useToast();
+
+  const handleToggle = async () => {
+    setLoading(true);
+    try {
+      if (bookmarked) {
+        await api.delete(`/users/bookmark/${userId}`);
+        setBookmarked(false);
+        toast.success('Bookmark removed', '');
+      } else {
+        await api.post(`/users/bookmark/${userId}`);
+        setBookmarked(true);
+        toast.success('Bookmarked!', 'Added to your bookmarks');
+      }
+    } catch (err) {
+      toast.error('Error', err.response?.data?.message || 'Failed');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <button onClick={handleToggle} disabled={loading}
+      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition active:scale-95 ${
+        bookmarked
+          ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
+          : 'bg-slate-700 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10'
+      }`}>
+      <Star className={`w-4 h-4 ${bookmarked ? 'fill-amber-400' : ''}`} />
+      {bookmarked ? 'Bookmarked' : 'Bookmark'}
     </button>
   );
 }
@@ -187,13 +222,15 @@ export default function ProfilePage() {
               </p>
             )}
           </div>
-          {!isOwn && (
-            <FollowButton
-              userId={profile._id}
-              initialStatus={profile.followStatus}
-              onUpdate={handleFollowUpdate}
-            />
-          )}
+          <div className="flex items-center gap-2">
+            {!isOwn && (
+              <FollowButton
+                userId={profile._id}
+                initialStatus={profile.followStatus}
+                onUpdate={handleFollowUpdate}
+              />
+            )}
+          </div>
         </div>
 
         {/* Bio */}
@@ -214,7 +251,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Quick actions */}
-        <div className="px-6 py-3 flex gap-2">
+        <div className="px-6 py-3 flex gap-2 flex-wrap">
           {!isOwn && (profile.followStatus === 'accepted' || profile.visibility === 'public') && (
             <Link to={`/calendar/${profile._id}`}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600/20 text-blue-400 text-sm font-medium hover:bg-blue-600/30 transition">
@@ -225,6 +262,11 @@ export default function ProfilePage() {
             <span className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-700/50 text-slate-500 text-sm font-medium cursor-not-allowed">
               <CalendarDays className="w-4 h-4" /> Awaiting approval
             </span>
+          )}
+
+          {/* Bookmark button */}
+          {!isOwn && profile.isBookmarked !== undefined && (
+            <BookmarkButton userId={profile._id} initialBookmarked={profile.isBookmarked} />
           )}
         </div>
       </div>
