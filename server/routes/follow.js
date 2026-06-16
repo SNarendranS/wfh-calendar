@@ -1,7 +1,9 @@
 import express from 'express';
 import User from '../models/User.js';
 import Follow from '../models/Follow.js';
+import Notification from '../models/Notification.js';
 import { protect } from '../middleware/auth.js';
+import { notifyUser } from '../utils/notificationManager.js';
 
 const router = express.Router();
 
@@ -31,6 +33,19 @@ router.post('/:userId', protect, async (req, res) => {
       following: targetId,
       status
     });
+
+    // Create notification for the target user
+    if (status === 'pending') {
+      await notifyUser(targetId, {
+        title: 'New Follow Request',
+        message: `${req.user.username} wants to follow you`,
+        type: 'INFO',
+        category: 'follow_request',
+        fromUser: req.user._id,
+        actionable: true,
+        actionData: { action: 'accept_follow', userId: req.user._id.toString() }
+      });
+    }
 
     res.status(201).json({ message: status === 'accepted' ? 'Now following' : 'Follow request sent', follow: { ...follow.toObject(), status } });
   } catch (err) {

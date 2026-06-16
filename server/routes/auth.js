@@ -155,19 +155,24 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password, companyName, otp } = req.body;
     if (!username || !email || !password) return res.status(400).json({ message: 'All fields required' });
+    if (!otp) return res.status(400).json({ message: 'Email verification OTP is required. Please verify your email first.' });
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Verify OTP if provided
-    if (otp) {
-      const vToken = await VerificationToken.findOne({
-        email: normalizedEmail,
-        otp,
-        type: 'email_verification',
-        used: true, // Must have been verified first
-      });
-      // If OTP was pre-verified via /verify-otp, that's fine — we check if email can be marked verified
-    }
+    // Verify OTP - must be unused and not expired
+    const vToken = await VerificationToken.findOne({
+      email: normalizedEmail,
+      otp,
+      type: 'email_verification',
+      used: false,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!vToken) return res.status(400).json({ message: 'Invalid or expired OTP. Please request a new verification code.' });
+
+    // Mark OTP as used
+    vToken.used = true;
+    await vToken.save();
 
     const exists = await User.findOne({ $or: [{ email: normalizedEmail }, { username }] });
     if (exists) return res.status(400).json({ message: 'User already exists' });

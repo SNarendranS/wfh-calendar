@@ -7,7 +7,7 @@ const links = [
   { to: '/calendar',      icon: CalendarDays,    label: 'Calendar'  },
   { to: '/search',        icon: Search,          label: 'Find People' },
   { to: '/notifications', icon: Bell,            label: 'Alerts'    },
-  { to: '/Profile',        icon: User,          label: 'Profile' },
+  { to: '/profile',       icon: User,            label: 'Profile'   },
   { to: '/settings',      icon: Settings,        label: 'Settings'  },
 ];
 

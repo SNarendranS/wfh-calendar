@@ -12,7 +12,6 @@ import NotificationsPage from './components/Notifications/NotificationsPage.jsx'
 import SettingsPage from './components/Settings/SettingsPage.jsx';
 import ProfilePage from './components/Profile/ProfilePage.jsx';
 import SearchPage from './components/Profile/SearchPage.jsx';
-import FollowRequestsPage from './components/Profile/FollowRequestsPage.jsx';
 
 function AppLayout() {
   const { unreadCount } = useNotifications();
@@ -31,7 +30,6 @@ function AppLayout() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/search" element={<SearchPage />} />
-          <Route path="/follow-requests" element={<FollowRequestsPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>

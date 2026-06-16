@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format, parseISO, isAfter, isBefore, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth } from 'date-fns';
-import { Home, Palmtree, TrendingUp, CalendarCheck, AlertTriangle, LogOut, ChevronLeft, ChevronRight, CalendarDays, Monitor } from 'lucide-react';
+import { Home, Palmtree, TrendingUp, CalendarCheck, AlertTriangle, LogOut, ChevronLeft, ChevronRight, CalendarDays, Monitor, Star } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
 import { MONTH_NAMES_FULL, MONTH_NAMES, toDateStr, isWeekend } from '../../utils/dateHelpers.js';
@@ -358,6 +359,61 @@ function HolidayCalendar({ holidays, entries }) {
   );
 }
 
+function BookmarkedPeople() {
+  const [bookmarks, setBookmarks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get('/users/bookmarks').then(res => {
+      setBookmarks(res.data);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const getStatusBadge = (entry) => {
+    if (!entry) return { label: 'No entry', color: 'text-slate-500', bg: 'bg-slate-700/40' };
+    switch (entry.type) {
+      case 'WFH': return { label: 'WFH', color: 'text-blue-300', bg: 'bg-blue-500/20' };
+      case 'LEAVE': return { label: `Leave${entry.leaveType ? ` · ${entry.leaveType}` : ''}`, color: 'text-emerald-300', bg: 'bg-emerald-500/20' };
+      case 'REMOTE': return { label: 'Remote', color: 'text-orange-300', bg: 'bg-orange-500/20' };
+      case 'HOLIDAY': return { label: 'Holiday', color: 'text-violet-300', bg: 'bg-violet-500/20' };
+      default: return { label: 'Office', color: 'text-slate-300', bg: 'bg-slate-700/40' };
+    }
+  };
+
+  if (loading) return null;
+  if (bookmarks.length === 0) return null;
+
+  return (
+    <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+      <h2 className="text-white font-semibold mb-3 flex items-center gap-2 text-sm">
+        <Star className="w-4 h-4 text-amber-400 fill-amber-400" /> Bookmarked People
+      </h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {bookmarks.map(u => {
+          const badge = getStatusBadge(u.todayEntry);
+          return (
+            <div key={u._id}
+              onClick={() => navigate(`/calendar/${u._id}`)}
+              className="flex items-center gap-3 p-3 rounded-xl bg-slate-700/40 border border-slate-700 cursor-pointer hover:border-slate-600 transition active:scale-[0.98]">
+              <div className="w-9 h-9 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-400 flex-shrink-0">
+                {(u.displayName || u.username)?.[0]?.toUpperCase() || '?'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-slate-200 text-sm font-medium truncate">{u.displayName || u.username}</p>
+                <p className="text-slate-500 text-[10px] truncate">@{u.username}</p>
+              </div>
+              <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg flex-shrink-0 ${badge.bg} ${badge.color}`}>
+                {badge.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const now = new Date();
   const year = now.getFullYear();
@@ -457,6 +513,9 @@ export default function Dashboard() {
             style={{ width: `${Math.min(100, (wfhThisMonth / wfhQuota) * 100)}%` }} />
         </div>
       </div>
+
+      {/* Bookmarked People */}
+      <BookmarkedPeople />
 
       {/* Two-column: Leave Balance + Holiday Calendar */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:items-start">

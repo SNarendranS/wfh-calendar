@@ -45,6 +45,12 @@ router.get('/:id/profile', protect, async (req, res) => {
       following: user._id
     });
 
+    // Check if bookmarked
+    const currentUser = await User.findById(req.user._id).select('bookmarkedUsers');
+    const isBookmarked = currentUser?.bookmarkedUsers?.some(
+      id => id.toString() === req.params.id
+    ) || false;
+
     // Count followers / following
     const followerCount = await Follow.countDocuments({ following: user._id, status: 'accepted' });
     const followingCount = await Follow.countDocuments({ follower: user._id, status: 'accepted' });
@@ -53,9 +59,82 @@ router.get('/:id/profile', protect, async (req, res) => {
       ...user.toObject(),
       followStatus: follow ? follow.status : null,
       followId: follow?._id,
+      isBookmarked,
       followerCount,
       followingCount
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── Bookmark a user (max 3) ───
+router.post('/bookmark/:userId', protect, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) return res.status(404).json({ message: 'User not found' });
+
+    const targetId = req.params.userId;
+    if (targetId === req.user._id.toString()) {
+      return res.status(400).json({ message: 'Cannot bookmark yourself' });
+    }
+
+    // Check if already bookmarked
+    if (currentUser.bookmarkedUsers?.some(id => id.toString() === targetId)) {
+      return res.status(400).json({ message: 'Already bookmarked' });
+    }
+
+    // Max 3
+    if ((currentUser.bookmarkedUsers?.length || 0) >= 3) {
+      return res.status(400).json({ message: 'Maximum 3 bookmarks allowed. Remove one first.' });
+    }
+
+    currentUser.bookmarkedUsers.push(targetId);
+    await currentUser.save();
+
+    res.json({ message: 'Bookmarked', bookmarkedUsers: currentUser.bookmarkedUsers });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── Remove bookmark ───
+router.delete('/bookmark/:userId', protect, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user._id);
+    if (!currentUser) return res.status(404).json({ message: 'User not found' });
+
+    currentUser.bookmarkedUsers = currentUser.bookmarkedUsers.filter(
+      id => id.toString() !== req.params.userId
+    );
+    await currentUser.save();
+
+    res.json({ message: 'Removed bookmark', bookmarkedUsers: currentUser.bookmarkedUsers });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── Get bookmarked users with today's entry ───
+router.get('/bookmarks', protect, async (req, res) => {
+  try {
+    const currentUser = await User.findById(req.user._id).populate({
+      path: 'bookmarkedUsers',
+      select: 'username displayName avatar bio visibility'
+    });
+
+    const today = new Date().toISOString().split('T')[0];
+    const CalendarEntry = (await import('../models/CalendarEntry.js')).default;
+
+    const bookmarksWithStatus = await Promise.all((currentUser.bookmarkedUsers || []).map(async (u) => {
+      const entry = await CalendarEntry.findOne({ userId: u._id, date: today }).select('type leaveType');
+      return {
+        ...u.toObject(),
+        todayEntry: entry || null
+      };
+    }));
+
+    res.json(bookmarksWithStatus);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
