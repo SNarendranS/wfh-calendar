@@ -1,3 +1,4 @@
+import "./config/env.js";
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -8,13 +9,13 @@ import companyRoutes from './routes/company.js';
 import calendarRoutes from './routes/calendar.js';
 import notificationRoutes from './routes/notifications.js';
 import leaveBalanceRoutes from './routes/leaveBalance.js';
+import userRoutes from './routes/users.js';
+import followRoutes from './routes/follow.js';
 import { startScheduler } from './utils/scheduler.js';
-
-dotenv.config();
 
 const app = express();
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173', credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // VAPID setup for web push
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -30,6 +31,8 @@ app.use('/api/company', companyRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/leave-balance', leaveBalanceRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/follow', followRoutes);
 
 app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
 

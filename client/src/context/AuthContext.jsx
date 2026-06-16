@@ -35,6 +35,40 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const sendOtp = async (email, purpose = 'email_verification') => {
+    const { data } = await api.post('/auth/send-otp', { email, purpose });
+    return data;
+  };
+
+  const verifyOtp = async (email, otp, purpose = 'email_verification') => {
+    const { data } = await api.post('/auth/verify-otp', { email, otp, purpose });
+    return data;
+  };
+
+  const sendLoginOtp = async (email) => {
+    const { data } = await api.post('/auth/send-login-otp', { email });
+    return data;
+  };
+
+  const loginWithOtp = async (email, otp) => {
+    const { data } = await api.post('/auth/login-otp', { email, otp });
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    api.defaults.headers.common['Authorization'] = `Bearer ${data.token}`;
+    setUser(data.user);
+    return data;
+  };
+
+  const forgotPassword = async (email) => {
+    const { data } = await api.post('/auth/forgot-password', { email });
+    return data;
+  };
+
+  const resetPassword = async (email, otp, newPassword) => {
+    const { data } = await api.post('/auth/reset-password', { email, otp, newPassword });
+    return data;
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -42,7 +76,11 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{
+    user, loading, login, register, logout,
+    sendOtp, verifyOtp, sendLoginOtp, loginWithOtp,
+    forgotPassword, resetPassword
+  }}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

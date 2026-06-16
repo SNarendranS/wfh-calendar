@@ -5,10 +5,14 @@ import { ToastProvider } from './components/Layout/Toast.jsx';
 import Sidebar from './components/Layout/Sidebar.jsx';
 import BottomNav from './components/Layout/BottomNav.jsx';
 import LoginPage from './components/Auth/LoginPage.jsx';
+import ForgotPasswordPage from './components/Auth/ForgotPasswordPage.jsx';
 import Dashboard from './components/Dashboard/Dashboard.jsx';
 import CalendarPage from './components/Calendar/CalendarPage.jsx';
 import NotificationsPage from './components/Notifications/NotificationsPage.jsx';
 import SettingsPage from './components/Settings/SettingsPage.jsx';
+import ProfilePage from './components/Profile/ProfilePage.jsx';
+import SearchPage from './components/Profile/SearchPage.jsx';
+import FollowRequestsPage from './components/Profile/FollowRequestsPage.jsx';
 
 function AppLayout() {
   const { unreadCount } = useNotifications();
@@ -21,8 +25,13 @@ function AppLayout() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/calendar/:userId" element={<CalendarPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/follow-requests" element={<FollowRequestsPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
@@ -43,6 +52,7 @@ function ProtectedApp() {
   if (!user) return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="*" element={<Navigate to="/login" />} />
     </Routes>
   );

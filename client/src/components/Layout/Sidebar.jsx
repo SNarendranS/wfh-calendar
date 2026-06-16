@@ -1,11 +1,13 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, CalendarDays, Settings, Bell, LogOut, Home } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, Settings, Bell, LogOut, Home, User, Search, UserPlus, Users } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 const links = [
   { to: '/',              icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/calendar',      icon: CalendarDays,    label: 'Calendar'  },
+  { to: '/search',        icon: Search,          label: 'Find People' },
   { to: '/notifications', icon: Bell,            label: 'Alerts'    },
+  { to: '/Profile',        icon: User,          label: 'Profile' },
   { to: '/settings',      icon: Settings,        label: 'Settings'  },
 ];
 

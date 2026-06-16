@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Wand2, Trash2, X, AlertTriangle, Monitor } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Wand2, Trash2, X, AlertTriangle, Monitor, ArrowLeft, Lock, User } from 'lucide-react';
 import { useCalendar } from '../../hooks/useCalendar.js';
 import { useToast } from '../Layout/Toast.jsx';
 import { getCalendarGrid, DAY_NAMES, toDateStr, TYPE_CONFIG, MONTH_NAMES_FULL, isWeekend } from '../../utils/dateHelpers.js';
@@ -200,22 +201,64 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
 }
 
 export default function CalendarPage() {
+  const { userId } = useParams();
+  const reactNavigate = useNavigate();
   const now = new Date();
+  const isReadOnly = !!userId;
+
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [company, setCompany] = useState(null);
   const [suggesting, setSuggesting] = useState(false);
+  const [viewUser, setViewUser] = useState(null);
+  const [viewEntries, setViewEntries] = useState(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewError, setViewError] = useState(null);
   const today = toDateStr(now);
   const toast = useToast();
   const { entryMap, loading, addEntry, removeEntry, bulkSetWfh, getSuggestions } = useCalendar(year, month);
 
   useEffect(() => { api.get('/company').then(r => setCompany(r.data)).catch(() => {}); }, []);
 
+  // Load other user's calendar
+  useEffect(() => {
+    if (!userId) {
+      setViewUser(null);
+      setViewEntries(null);
+      setViewError(null);
+      return;
+    }
+    setViewLoading(true);
+    setViewError(null);
+    Promise.all([
+      api.get(`/users/${userId}/profile`),
+      api.get(`/calendar/user/${userId}`, { params: { year, month } })
+    ]).then(([profileRes, calRes]) => {
+      if (!calRes.data.visible) {
+        setViewError('This calendar is not visible to you.');
+        setViewUser(null);
+        setViewEntries({});
+      } else {
+        setViewUser(profileRes.data);
+        const map = {};
+        (calRes.data.entries || []).forEach(e => { map[e.date] = e; });
+        setViewEntries(map);
+      }
+    }).catch(err => {
+      if (err.response?.status === 403) {
+        setViewError(err.response.data.message || 'This calendar is private.');
+      } else {
+        setViewError('Could not load this calendar.');
+      }
+    }).finally(() => setViewLoading(false));
+  }, [userId, year, month]);
+
   const grid = getCalendarGrid(year, month);
-  const wfhCount = Object.values(entryMap).filter(e => e.type === 'WFH').length;
-  const remoteCount = Object.values(entryMap).filter(e => e.type === 'REMOTE').length;
+  const currentEntryMap = isReadOnly ? (viewEntries || {}) : entryMap;
+  const wfhCount = Object.values(currentEntryMap).filter(e => e.type === 'WFH').length;
+  const remoteCount = Object.values(currentEntryMap).filter(e => e.type === 'REMOTE').length;
   const quota = company?.wfhPerMonth || 8;
 
   const navigate = (dir) => {
@@ -245,37 +288,69 @@ export default function CalendarPage() {
       {/* Sticky header */}
       <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 lg:px-6 py-3">
         <div className="flex items-center gap-3 max-w-2xl lg:max-w-5xl mx-auto lg:mx-0">
+          {isReadOnly && (
+            <button onClick={() => reactNavigate(-1)} className="p-2 bg-slate-800 rounded-xl text-slate-400 active:bg-slate-700">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
           <button onClick={() => navigate(-1)} className="p-2 bg-slate-800 rounded-xl text-slate-400 active:bg-slate-700">
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 text-center lg:text-left">
+            {viewUser && (
+              <p className="text-xs text-blue-400 font-medium mb-0.5">
+                <User className="w-3 h-3 inline mr-1" />{viewUser.displayName || viewUser.username}'s Calendar
+              </p>
+            )}
             <h1 className="text-base lg:text-xl font-bold text-white leading-tight">
               {MONTH_NAMES_FULL[month-1]} {year}
             </h1>
-            <div className="flex items-center justify-center lg:justify-start gap-3 text-xs text-slate-500">
-              <span>{wfhCount}/{quota} WFH</span>
-              {remoteCount > 0 && <span>· {remoteCount} Remote</span>}
-            </div>
+            {!isReadOnly && (
+              <div className="flex items-center justify-center lg:justify-start gap-3 text-xs text-slate-500">
+                <span>{wfhCount}/{quota} WFH</span>
+                {remoteCount > 0 && <span>· {remoteCount} Remote</span>}
+              </div>
+            )}
           </div>
           <button onClick={() => navigate(1)} className="p-2 bg-slate-800 rounded-xl text-slate-400 active:bg-slate-700">
             <ChevronRight className="w-5 h-5" />
           </button>
-          <button onClick={autoSuggest} disabled={suggesting || wfhCount >= quota}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 disabled:opacity-40 text-white rounded-xl text-xs font-semibold active:bg-blue-700 flex-shrink-0">
-            <Wand2 className="w-3.5 h-3.5" />
-            <span>{suggesting ? 'Filling...' : 'Auto-fill'}</span>
-          </button>
+          {!isReadOnly && (
+            <button onClick={autoSuggest} disabled={suggesting || wfhCount >= quota}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 disabled:opacity-40 text-white rounded-xl text-xs font-semibold active:bg-blue-700 flex-shrink-0">
+              <Wand2 className="w-3.5 h-3.5" />
+              <span>{suggesting ? 'Filling...' : 'Auto-fill'}</span>
+            </button>
+          )}
         </div>
-        <div className="max-w-2xl lg:max-w-5xl mx-auto lg:mx-0 mt-2">
-          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100,(wfhCount/quota)*100)}%` }} />
+        {!isReadOnly && (
+          <div className="max-w-2xl lg:max-w-5xl mx-auto lg:mx-0 mt-2">
+            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-500"
+                style={{ width: `${Math.min(100,(wfhCount/quota)*100)}%` }} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Calendar body */}
       <div className="flex-1 px-3 lg:px-6 pt-3 pb-4 max-w-2xl lg:max-w-5xl mx-auto lg:mx-0 w-full">
+        {viewError && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-4 flex items-start gap-3">
+            <Lock className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-amber-300 font-medium text-sm">Calendar not available</p>
+              <p className="text-amber-400/70 text-xs mt-0.5">{viewError}</p>
+            </div>
+          </div>
+        )}
+
+        {isReadOnly && viewLoading && (
+          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
+            <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mr-2" /> Loading...
+          </div>
+        )}
+
         <div className="flex gap-3 mb-3 overflow-x-auto pb-1 scrollbar-hide">
           {Object.entries(TYPE_CONFIG).map(([k, v]) => (
             <div key={k} className="flex items-center gap-1 text-[10px] text-slate-400 flex-shrink-0">
@@ -290,21 +365,23 @@ export default function CalendarPage() {
           ))}
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Loading...</div>
+        {(loading || viewLoading) && !viewError ? (
+          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
+            <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mr-2" /> Loading...
+          </div>
         ) : (
           <div className="grid grid-cols-7 gap-1">
             {grid.map((date, i) => (
               <DayCell key={i} date={date}
-                entry={date ? entryMap[toDateStr(date)] : null}
+                entry={date ? currentEntryMap[toDateStr(date)] : null}
                 company={company} today={today}
-                onClick={(d, e) => { setSelectedDate(d); setSelectedEntry(e || null); }} />
+                onClick={isReadOnly ? () => {} : (d, e) => { setSelectedDate(d); setSelectedEntry(e || null); }} />
             ))}
           </div>
         )}
       </div>
 
-      {selectedDate && (
+      {!isReadOnly && selectedDate && (
         <EntryModal
           date={selectedDate}
           entry={selectedEntry}
