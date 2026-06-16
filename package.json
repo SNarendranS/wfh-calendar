@@ -1,9 +1,0 @@
-{
-  "name": "wfh-calendar",
-  "version": "1.0.0",
-  "scripts": {
-    "server": "cd server && npm run dev",
-    "client": "cd client && npm run dev",
-    "install:all": "cd server && npm install && cd ../client && npm install"
-  }
-}

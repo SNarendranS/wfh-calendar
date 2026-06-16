@@ -6,6 +6,18 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
   companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company' },
+  // Profile fields
+  displayName: { type: String, trim: true },
+  avatar: { type: String, default: '' },
+  bio: { type: String, default: '', maxlength: 500 },
+  phone: { type: String, default: '' },
+  isEmailVerified: { type: Boolean, default: false },
+  // Calendar visibility: 'public' = anyone can see, 'followers' = only followers, 'private' = only me
+  visibility: {
+    type: String,
+    enum: ['public', 'followers', 'private'],
+    default: 'followers'
+  },
   pushSubscriptions: [{ type: Object }],
   notificationPrefs: {
     inApp: { type: Boolean, default: true },

@@ -3,6 +3,8 @@ import { format, parseISO, addDays } from 'date-fns';
 import CalendarEntry from '../models/CalendarEntry.js';
 import LeaveBalance from '../models/LeaveBalance.js';
 import Company from '../models/Company.js';
+import User from '../models/User.js';
+import Follow from '../models/Follow.js';
 import Notification from '../models/Notification.js';
 import { protect } from '../middleware/auth.js';
 import { checkWfhWarning, suggestBestWfhDays } from '../utils/wfhLogic.js';
@@ -77,7 +79,7 @@ function getAccrued(leaveType, year) {
   return Math.min(totalQuota, Math.floor(creditsSoFar * perPeriod));
 }
 
-// Get entries for a year or month
+// Get entries for a year or month (own calendar)
 router.get('/', protect, async (req, res) => {
   try {
     const { year, month } = req.query;
@@ -86,6 +88,52 @@ router.get('/', protect, async (req, res) => {
     if (month) filter.month = parseInt(month);
     const entries = await CalendarEntry.find(filter).sort({ date: 1 });
     res.json(entries);
+  } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+// Get another user's calendar entries (access control enforced)
+router.get('/user/:userId', protect, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { year, month } = req.query;
+
+    // Can't view own calendar via this route
+    if (userId === req.user._id.toString()) {
+      return res.redirect('/api/calendar?' + new URLSearchParams({ year, month }).toString());
+    }
+
+    const targetUser = await User.findById(userId).select('visibility');
+    if (!targetUser) return res.status(404).json({ message: 'User not found' });
+
+    let canView = false;
+
+    if (targetUser.visibility === 'public') {
+      canView = true;
+    } else if (targetUser.visibility === 'followers') {
+      // Check if the current user is an accepted follower
+      const follow = await Follow.findOne({
+        follower: req.user._id,
+        following: userId,
+        status: 'accepted'
+      });
+      canView = !!follow;
+    } else {
+      canView = false; // private
+    }
+
+    if (!canView) {
+      return res.status(403).json({
+        message: 'This user\'s calendar is not visible to you. Send a follow request to view their schedule.',
+        visible: false
+      });
+    }
+
+    const filter = { userId };
+    if (year) filter.year = parseInt(year);
+    if (month) filter.month = parseInt(month);
+    const entries = await CalendarEntry.find(filter).sort({ date: 1 });
+
+    res.json({ entries, visible: true, visibility: targetUser.visibility });
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
