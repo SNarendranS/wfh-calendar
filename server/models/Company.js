@@ -10,6 +10,7 @@ const leaveTypeSchema = new mongoose.Schema({
   yearlyQuota:  { type: Number, default: 0 },
   monthlyQuota: { type: Number, default: 0 }, // 0 = no cap
   weeklyQuota:  { type: Number, default: 0 }, // 0 = no cap
+  allowHalfDay: { type: Boolean, default: false },
   accrualRule: {
     frequency: { type: String, enum: ['monthly', 'quarterly', 'halfYearly', 'yearly'], default: 'yearly' },
     creditDay: { type: Number, default: 1, min: 1, max: 31 },
@@ -23,11 +24,11 @@ const companySchema = new mongoose.Schema({
   leaveTypes: {
     type: [leaveTypeSchema],
     default: [
-      { key: 'PL',  label: 'Paid Leave',       yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true, maxCarryover: 5, unlimited: false, accrualRule: { frequency: 'monthly', creditDay: 30 } },
-      { key: 'ML',  label: 'Medical Leave',     yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, unlimited: false, accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
-      { key: 'EL',  label: 'Election Leave',    yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
-      { key: 'UL',  label: 'Unpaid Leave',      yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, unlimited: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },
-      { key: 'PAT', label: 'Paternity Leave',   yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
+      { key: 'PL',  label: 'Paid Leave',       yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true, maxCarryover: 5, unlimited: false, allowHalfDay: true,  accrualRule: { frequency: 'monthly', creditDay: 30 } },
+      { key: 'ML',  label: 'Medical Leave',     yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, unlimited: false, allowHalfDay: true,  accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
+      { key: 'EL',  label: 'Election Leave',    yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, unlimited: false, allowHalfDay: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
+      { key: 'UL',  label: 'Unpaid Leave',      yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, unlimited: true,  allowHalfDay: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },
+      { key: 'PAT', label: 'Paternity Leave',   yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, unlimited: false, allowHalfDay: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
     ]
   },
   publicHolidays: [{

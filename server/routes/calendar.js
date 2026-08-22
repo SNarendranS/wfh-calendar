@@ -137,10 +137,46 @@ router.get('/user/:userId', protect, async (req, res) => {
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 
+// Helper to calculate leave weights for an entry
+function getLeaveUsageByEntry(entry) {
+  const usage = {};
+  if (!entry) return usage;
+  if (entry.type === 'LEAVE' && entry.leaveType) {
+    const weight = entry.isHalfDay ? 0.5 : 1.0;
+    usage[entry.leaveType] = (usage[entry.leaveType] || 0) + weight;
+  }
+  if (entry.isHalfDay && entry.secondHalfType === 'LEAVE' && entry.secondHalfLeaveType) {
+    usage[entry.secondHalfLeaveType] = (usage[entry.secondHalfLeaveType] || 0) + 0.5;
+  }
+  return usage;
+}
+
+// Helper to calculate WFH weight for an entry
+function getWfhWeight(entry) {
+  if (!entry) return 0;
+  if (!entry.isHalfDay) {
+    return entry.type === 'WFH' ? 1.0 : 0;
+  }
+  let weight = 0;
+  if (entry.type === 'WFH') weight += 0.5;
+  if (entry.secondHalfType === 'WFH') weight += 0.5;
+  return weight;
+}
+
 // Add or update a single entry
 router.post('/', protect, async (req, res) => {
   try {
-    const { date, type, leaveType, note } = req.body;
+    const {
+      date,
+      type,
+      leaveType,
+      note,
+      isHalfDay = false,
+      halfDaySession = null,
+      secondHalfType = null,
+      secondHalfLeaveType = null
+    } = req.body;
+
     if (!date || !type) return res.status(400).json({ message: 'date and type required' });
 
     const dateObj = parseISO(date);
@@ -151,55 +187,122 @@ router.post('/', protect, async (req, res) => {
     const company = await Company.findById(req.user.companyId);
     const holidays = company?.publicHolidays || [];
 
-    let warnings = [];
-
-    // Validate leave against available balance (accrued + carried)
-    if (type === 'LEAVE' && leaveType) {
-      const ltConfig = company?.leaveTypes?.find(l => l.key === leaveType);
-      if (ltConfig && !ltConfig.unlimited) {
-        const lb = await LeaveBalance.findOne({ userId: req.user._id, year });
-        const balance = lb?.balances?.find(b => b.leaveKey === leaveType);
-        const accrued = getAccrued(ltConfig, year);
-        const carried = balance?.carried || 0;
-        const available = accrued + carried;
-        const used = (balance?.used || 0);
-
-        // Check if applying this leave would exceed available (accrued + carried)
-        const existingEntry = await CalendarEntry.findOne({ userId: req.user._id, date });
-        const isNew = !existingEntry || existingEntry.type !== 'LEAVE' || existingEntry.leaveType !== leaveType;
-        if (isNew && used >= available) {
+    // 1. Validate half-day leave permissions
+    if (isHalfDay) {
+      if (type === 'LEAVE' && leaveType) {
+        const ltConfig = company?.leaveTypes?.find(l => l.key === leaveType);
+        if (ltConfig && ltConfig.allowHalfDay === false) {
           return res.status(400).json({
-            message: `Insufficient leave balance. You have used ${used}/${available} ${ltConfig.label} leaves (${accrued} accrued + ${carried} carried). More leaves will be credited on the next cycle (${ltConfig.accrualRule?.frequency || 'yearly'}).`
+            message: `${ltConfig.label} cannot be taken as a half-day leave. Only full-day leave is allowed.`
+          });
+        }
+      }
+      if (secondHalfType === 'LEAVE' && secondHalfLeaveType) {
+        const ltConfig = company?.leaveTypes?.find(l => l.key === secondHalfLeaveType);
+        if (ltConfig && ltConfig.allowHalfDay === false) {
+          return res.status(400).json({
+            message: `${ltConfig.label} cannot be taken as a half-day leave. Only full-day leave is allowed.`
           });
         }
       }
     }
 
-    if (type === 'WFH') {
-      // Check monthly WFH quota
-      const monthEntries = await CalendarEntry.find({ userId: req.user._id, year, month, type: 'WFH' });
-      const allWfhDates = monthEntries.map(e => e.date);
+    const existingEntry = await CalendarEntry.findOne({ userId: req.user._id, date });
+    const oldLeaveUsage = getLeaveUsageByEntry(existingEntry);
 
-      if (monthEntries.length >= (company?.wfhPerMonth || 8)) {
-        return res.status(400).json({ message: `WFH quota for this month (${company?.wfhPerMonth || 8}) already reached` });
+    const proposedEntry = {
+      type,
+      leaveType: type === 'LEAVE' ? leaveType : undefined,
+      isHalfDay,
+      halfDaySession,
+      secondHalfType: isHalfDay ? secondHalfType : null,
+      secondHalfLeaveType: isHalfDay && secondHalfType === 'LEAVE' ? secondHalfLeaveType : null,
+    };
+    const newLeaveUsage = getLeaveUsageByEntry(proposedEntry);
+
+    // 2. Validate leave balance for any new/increased leave usage
+    const lb = await LeaveBalance.findOne({ userId: req.user._id, year });
+    const leaveKeys = new Set([...Object.keys(oldLeaveUsage), ...Object.keys(newLeaveUsage)]);
+
+    for (const lk of leaveKeys) {
+      const oldUsed = oldLeaveUsage[lk] || 0;
+      const newUsed = newLeaveUsage[lk] || 0;
+      const netDelta = newUsed - oldUsed;
+
+      if (netDelta > 0) {
+        const ltConfig = company?.leaveTypes?.find(l => l.key === lk);
+        if (ltConfig && !ltConfig.unlimited) {
+          const balance = lb?.balances?.find(b => b.leaveKey === lk);
+          const accrued = getAccrued(ltConfig, year);
+          const carried = balance?.carried || 0;
+          const available = accrued + carried;
+          const currentTotalUsed = balance?.used || 0;
+
+          if (currentTotalUsed + netDelta > available) {
+            return res.status(400).json({
+              message: `Insufficient leave balance. You have used ${currentTotalUsed}/${available} ${ltConfig.label} leaves (${accrued} accrued + ${carried} carried). More leaves will be credited on the next cycle (${ltConfig.accrualRule?.frequency || 'yearly'}).`
+            });
+          }
+        }
       }
-
-      warnings = checkWfhWarning(date, company?.preferredWfhDays || [4, 5], allWfhDates);
     }
 
-    // Upsert entry
+    let warnings = [];
+
+    // 3. Validate WFH Quota
+    const newWfhWeight = getWfhWeight(proposedEntry);
+    const oldWfhWeight = getWfhWeight(existingEntry);
+    const wfhDelta = newWfhWeight - oldWfhWeight;
+
+    if (wfhDelta > 0 || newWfhWeight > 0) {
+      const monthEntries = await CalendarEntry.find({ userId: req.user._id, year, month });
+      const currentMonthWfhWeight = monthEntries
+        .filter(e => e.date !== date)
+        .reduce((sum, e) => sum + getWfhWeight(e), 0);
+
+      const maxWfhQuota = company?.wfhPerMonth || 8;
+      if (currentMonthWfhWeight + newWfhWeight > maxWfhQuota) {
+        return res.status(400).json({
+          message: `WFH quota for this month (${maxWfhQuota}) already reached. Current usage: ${currentMonthWfhWeight + oldWfhWeight} days.`
+        });
+      }
+
+      if (type === 'WFH' || secondHalfType === 'WFH') {
+        const allWfhDates = monthEntries.filter(e => e.type === 'WFH' || e.secondHalfType === 'WFH').map(e => e.date);
+        warnings = checkWfhWarning(date, company?.preferredWfhDays || [4, 5], allWfhDates);
+      }
+    }
+
+    // 4. Upsert entry
     const entry = await CalendarEntry.findOneAndUpdate(
       { userId: req.user._id, date },
-      { userId: req.user._id, date, type, leaveType, note, year, month },
+      {
+        userId: req.user._id,
+        date,
+        type,
+        leaveType: type === 'LEAVE' ? leaveType : undefined,
+        note,
+        year,
+        month,
+        isHalfDay: !!isHalfDay,
+        halfDaySession: isHalfDay ? halfDaySession : null,
+        secondHalfType: isHalfDay ? secondHalfType : null,
+        secondHalfLeaveType: isHalfDay && secondHalfType === 'LEAVE' ? secondHalfLeaveType : null,
+      },
       { upsert: true, new: true }
     );
 
-    // Update leave balance
-    if (type === 'LEAVE' && leaveType) {
-      await LeaveBalance.findOneAndUpdate(
-        { userId: req.user._id, year, 'balances.leaveKey': leaveType },
-        { $inc: { 'balances.$.used': 1 } }
-      );
+    // 5. Update leave balances atomically
+    for (const lk of leaveKeys) {
+      const oldUsed = oldLeaveUsage[lk] || 0;
+      const newUsed = newLeaveUsage[lk] || 0;
+      const netDelta = newUsed - oldUsed;
+      if (netDelta !== 0) {
+        await LeaveBalance.findOneAndUpdate(
+          { userId: req.user._id, year, 'balances.leaveKey': lk },
+          { $inc: { 'balances.$.used': netDelta } }
+        );
+      }
     }
 
     // Create warning notifications
@@ -225,12 +328,15 @@ router.delete('/:date', protect, async (req, res) => {
     if (!entry) return res.status(404).json({ message: 'Entry not found' });
 
     // Restore leave balance
-    if (entry.type === 'LEAVE' && entry.leaveType) {
-      const year = parseISO(date).getFullYear();
-      await LeaveBalance.findOneAndUpdate(
-        { userId: req.user._id, year, 'balances.leaveKey': entry.leaveType },
-        { $inc: { 'balances.$.used': -1 } }
-      );
+    const year = parseISO(date).getFullYear();
+    const leaveUsage = getLeaveUsageByEntry(entry);
+    for (const [lk, amount] of Object.entries(leaveUsage)) {
+      if (amount > 0) {
+        await LeaveBalance.findOneAndUpdate(
+          { userId: req.user._id, year, 'balances.leaveKey': lk },
+          { $inc: { 'balances.$.used': -amount } }
+        );
+      }
     }
 
     res.json({ message: 'Deleted' });
@@ -249,7 +355,7 @@ router.post('/bulk-wfh', protect, async (req, res) => {
     const ops = dates.map(date => ({
       updateOne: {
         filter: { userId: req.user._id, date },
-        update: { userId: req.user._id, date, type: 'WFH', year, month, autoGenerated: true },
+        update: { userId: req.user._id, date, type: 'WFH', year, month, autoGenerated: true, isHalfDay: false },
         upsert: true
       }
     }));
@@ -268,12 +374,15 @@ router.get('/suggest-wfh', protect, async (req, res) => {
 
     // Get ALL entries for this month to know what's blocked
     const monthEntries = await CalendarEntry.find({ userId: req.user._id, year: y, month: m });
-    const existingWfh = monthEntries.filter(e => e.type === 'WFH').map(e => e.date);
+    const existingWfh = monthEntries
+      .filter(e => e.type === 'WFH' || e.secondHalfType === 'WFH')
+      .map(e => e.date);
     const blockedDates = monthEntries
       .filter(e => e.type === 'LEAVE' || e.type === 'HOLIDAY')
       .map(e => e.date);
 
-    const remaining = (company?.wfhPerMonth || 8) - existingWfh.length;
+    const existingWfhWeight = monthEntries.reduce((sum, e) => sum + getWfhWeight(e), 0);
+    const remaining = Math.max(0, Math.floor((company?.wfhPerMonth || 8) - existingWfhWeight));
 
     const suggestions = suggestBestWfhDays(
       y, m,

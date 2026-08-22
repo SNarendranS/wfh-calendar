@@ -21,8 +21,19 @@ export function useCalendar(year, month) {
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
-  const addEntry = async (date, type, leaveType, note) => {
-    const { data } = await api.post('/calendar', { date, type, leaveType, note });
+  const addEntry = async (entryData, legacyType, legacyLeaveType, legacyNote) => {
+    let payload;
+    if (typeof entryData === 'object' && entryData !== null && entryData.date) {
+      payload = entryData;
+    } else {
+      payload = {
+        date: entryData,
+        type: legacyType,
+        leaveType: legacyLeaveType,
+        note: legacyNote
+      };
+    }
+    const { data } = await api.post('/calendar', payload);
     await fetchEntries();
     return data; // includes warnings
   };

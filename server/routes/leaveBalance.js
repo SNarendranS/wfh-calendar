@@ -143,32 +143,53 @@ router.get('/:year', protect, async (req, res) => {
     const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
     const monthEnd   = format(endOfMonth(now),   'yyyy-MM-dd');
 
-    const weekEntries  = await CalendarEntry.find({ userId: req.user._id, type: 'LEAVE', date: { $gte: weekStart,  $lte: weekEnd  } });
-    const monthEntries = await CalendarEntry.find({ userId: req.user._id, type: 'LEAVE', date: { $gte: monthStart, $lte: monthEnd } });
+    const weekEntries  = await CalendarEntry.find({
+      userId: req.user._id,
+      date: { $gte: weekStart, $lte: weekEnd },
+      $or: [{ type: 'LEAVE' }, { secondHalfType: 'LEAVE' }]
+    });
+    const monthEntries = await CalendarEntry.find({
+      userId: req.user._id,
+      date: { $gte: monthStart, $lte: monthEnd },
+      $or: [{ type: 'LEAVE' }, { secondHalfType: 'LEAVE' }]
+    });
 
-    const weekMap  = weekEntries.reduce((a, e)  => { a[e.leaveType] = (a[e.leaveType] || 0) + 1; return a; }, {});
-    const monthMap = monthEntries.reduce((a, e) => { a[e.leaveType] = (a[e.leaveType] || 0) + 1; return a; }, {});
+    const addUsage = (map, e) => {
+      if (e.type === 'LEAVE' && e.leaveType) {
+        const weight = e.isHalfDay ? 0.5 : 1.0;
+        map[e.leaveType] = (map[e.leaveType] || 0) + weight;
+      }
+      if (e.isHalfDay && e.secondHalfType === 'LEAVE' && e.secondHalfLeaveType) {
+        map[e.secondHalfLeaveType] = (map[e.secondHalfLeaveType] || 0) + 0.5;
+      }
+      return map;
+    };
+
+    const weekMap  = weekEntries.reduce(addUsage, {});
+    const monthMap = monthEntries.reduce(addUsage, {});
 
     const enriched = lb.toObject();
     enriched.balances = enriched.balances.map(b => {
       const lt = company.leaveTypes.find(l => l.key === b.leaveKey);
       const accrued = lt ? getAccrued(lt, year) : b.total;
       // Available = accrued so far this year + carried from last year - used
-      const available = b.unlimited ? Infinity : Math.max(0, accrued + (b.carried || 0) - b.used);
+      const rawAvailable = b.unlimited ? Infinity : Math.max(0, accrued + (b.carried || 0) - b.used);
+      const available = b.unlimited ? Infinity : Number(rawAvailable.toFixed(2));
       return {
         ...b,
-        accrued:  b.unlimited ? Infinity : accrued,
-        available: b.unlimited ? Infinity : available,
-        usedThisWeek:  weekMap[b.leaveKey]  || 0,
-        usedThisMonth: monthMap[b.leaveKey] || 0,
+        accrued:  b.unlimited ? Infinity : Number(accrued.toFixed(2)),
+        available,
+        usedThisWeek:  Number((weekMap[b.leaveKey] || 0).toFixed(2)),
+        usedThisMonth: Number((monthMap[b.leaveKey] || 0).toFixed(2)),
       };
     });
 
-    // Add leaveTypes with accrual + carryover info for the frontend
+    // Add leaveTypes with accrual + carryover + allowHalfDay info for the frontend
     enriched.leaveTypes = company.leaveTypes.map(lt => ({
       key: lt.key,
       label: lt.label,
       color: lt.color,
+      allowHalfDay: lt.allowHalfDay !== undefined ? lt.allowHalfDay : (lt.key === 'PL' || lt.key === 'ML' || lt.key === 'UL'),
       accrualRule: lt.accrualRule || { frequency: 'yearly', creditDay: 1 },
       carryForward: lt.carryForward || false,
       maxCarryover: lt.maxCarryover || 0,

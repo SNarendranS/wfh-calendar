@@ -13,13 +13,39 @@ export function startScheduler() {
   cron.schedule('0 8 * * *', async () => {
     try {
       const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
-      const entries = await CalendarEntry.find({ date: tomorrow, type: { $in: ['WFH', 'LEAVE', 'REMOTE'] } });
+      const entries = await CalendarEntry.find({
+        date: tomorrow,
+        $or: [
+          { type: { $in: ['WFH', 'LEAVE', 'REMOTE'] } },
+          { secondHalfType: { $in: ['WFH', 'LEAVE', 'REMOTE'] } }
+        ]
+      });
 
       for (const entry of entries) {
         const user = await User.findById(entry.userId);
         if (!user) continue;
 
-        const label = entry.type === 'WFH' ? 'Work From Home' : entry.type === 'REMOTE' ? 'Remote Work' : `Leave (${entry.leaveType || ''})`;
+        const getPartLabel = (t, lt) => {
+          if (t === 'WFH') return 'WFH';
+          if (t === 'REMOTE') return 'Remote';
+          if (t === 'OFFICE') return 'Office';
+          if (t === 'LEAVE') return `Leave (${lt || ''})`;
+          return t;
+        };
+
+        let label;
+        if (!entry.isHalfDay) {
+          label = entry.type === 'WFH' ? 'Work From Home' : entry.type === 'REMOTE' ? 'Remote Work' : `Leave (${entry.leaveType || ''})`;
+        } else {
+          const first = getPartLabel(entry.type, entry.leaveType);
+          const second = entry.secondHalfType ? getPartLabel(entry.secondHalfType, entry.secondHalfLeaveType) : (entry.halfDaySession === 'FIRST_HALF' ? 'Office' : 'Office');
+          if (entry.halfDaySession === 'SECOND_HALF') {
+            label = `Half-Day: Office (AM) / ${first} (PM)`;
+          } else {
+            label = `Half-Day: ${first} (AM) / ${second} (PM)`;
+          }
+        }
+
         const notif = await Notification.create({
           userId: user._id,
           title: `Tomorrow: ${label}`,

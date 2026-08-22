@@ -4,7 +4,7 @@ import { format, parseISO, isAfter, isBefore, startOfMonth, endOfMonth, eachDayO
 import { Home, Palmtree, TrendingUp, CalendarCheck, AlertTriangle, LogOut, ChevronLeft, ChevronRight, CalendarDays, Monitor, Star } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 import api from '../../utils/api.js';
-import { MONTH_NAMES_FULL, MONTH_NAMES, toDateStr, isWeekend } from '../../utils/dateHelpers.js';
+import { MONTH_NAMES_FULL, MONTH_NAMES, toDateStr, isWeekend, formatDayCount, getEntryDisplayInfo } from '../../utils/dateHelpers.js';
 
 function StatCard({ icon: Icon, label, value, sub, color, bgColor }) {
   return (
@@ -77,11 +77,11 @@ function CarryoverInput({ b, lt, year, onSaved }) {
 
 function LeaveBar({ b, lt, year, onCarryoverSaved }) {
   const isUnlimited = b.unlimited;
-  const accrued = b.accrued || b.total;
+  const accrued = b.accrued !== undefined ? b.accrued : b.total;
   const carried = b.carried || 0;
   const available = b.available !== undefined ? b.available : Math.max(0, accrued + carried - b.used);
   const pct = isUnlimited ? 0 : (available ? Math.min(100, (b.used / (available + b.used)) * 100) : 0);
-  const remaining = isUnlimited ? '∞' : available;
+  const remaining = isUnlimited ? '∞' : formatDayCount(available);
   const color = lt?.color || '#10b981';
   return (
     <div className="space-y-1">
@@ -89,9 +89,14 @@ function LeaveBar({ b, lt, year, onCarryoverSaved }) {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
           <span className="text-slate-200 text-sm font-medium">{lt?.label || b.leaveKey}</span>
+          {lt?.allowHalfDay && (
+            <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              ½ Allowed
+            </span>
+          )}
         </div>
         <span className="text-slate-400 text-xs font-medium">
-          {isUnlimited ? `${b.used} used · ∞` : `${remaining} available`}
+          {isUnlimited ? `${formatDayCount(b.used)} used · ∞` : `${remaining} available`}
         </span>
       </div>
       {!isUnlimited && (
@@ -102,18 +107,18 @@ function LeaveBar({ b, lt, year, onCarryoverSaved }) {
       <div className="flex gap-2 flex-wrap">
         {/* Keka-style breakdown */}
         <span className="text-[10px] text-slate-400 bg-slate-700/50 rounded-md px-1.5 py-0.5">
-          Used {b.used} day{b.used !== 1 ? 's' : ''}
+          Used {formatDayCount(b.used)} day{b.used !== 1 ? 's' : ''}
         </span>
         <span className="text-[10px] text-slate-400 bg-slate-700/50 rounded-md px-1.5 py-0.5">
-          Accrued {accrued}
+          Accrued {formatDayCount(accrued)}
         </span>
         {carried > 0 && (
           <span className="text-[10px] text-amber-400 bg-amber-500/10 rounded-md px-1.5 py-0.5">
-            Carryover {carried}
+            Carryover {formatDayCount(carried)}
           </span>
         )}
         <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
-          Annual {b.total}
+          Annual {formatDayCount(b.total)}
         </span>
 
         {/* Self-service carryover entry */}
@@ -123,17 +128,17 @@ function LeaveBar({ b, lt, year, onCarryoverSaved }) {
 
         {b.weeklyQuota > 0 && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
-            This week: {b.usedThisWeek || 0}/{b.weeklyQuota}
+            This week: {formatDayCount(b.usedThisWeek || 0)}/{b.weeklyQuota}
           </span>
         )}
         {b.monthlyQuota > 0 && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
-            This month: {b.usedThisMonth || 0}/{b.monthlyQuota}
+            This month: {formatDayCount(b.usedThisMonth || 0)}/{b.monthlyQuota}
           </span>
         )}
         {isUnlimited && (
           <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded-md px-1.5 py-0.5">
-            {b.usedThisMonth || 0} days this month
+            {formatDayCount(b.usedThisMonth || 0)} days this month
           </span>
         )}
       </div>
@@ -180,6 +185,9 @@ function MiniCalendar({ year, month, holidays, entries }) {
                       isWeekendDay ? 'text-slate-600' : 'text-slate-400'}`}>
               {date.getDate()}
               {isHoliday && <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-violet-400 rounded-full" />}
+              {entry?.isHalfDay && !isHoliday && (
+                <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-amber-400 rounded-full" />
+              )}
             </div>
           );
         })}
@@ -439,9 +447,30 @@ export default function Dashboard() {
     }).catch(() => { }).finally(() => setLoading(false));
   }, []);
 
-  const wfhThisMonth = monthEntries.filter(e => e.type === 'WFH').length;
-  const remoteThisMonth = monthEntries.filter(e => e.type === 'REMOTE').length;
-  const leaveThisMonth = monthEntries.filter(e => e.type === 'LEAVE').length;
+  const wfhThisMonth = monthEntries.reduce((sum, e) => {
+    if (!e.isHalfDay) return sum + (e.type === 'WFH' ? 1 : 0);
+    let c = 0;
+    if (e.type === 'WFH') c += 0.5;
+    if (e.secondHalfType === 'WFH') c += 0.5;
+    return sum + c;
+  }, 0);
+
+  const remoteThisMonth = monthEntries.reduce((sum, e) => {
+    if (!e.isHalfDay) return sum + (e.type === 'REMOTE' ? 1 : 0);
+    let c = 0;
+    if (e.type === 'REMOTE') c += 0.5;
+    if (e.secondHalfType === 'REMOTE') c += 0.5;
+    return sum + c;
+  }, 0);
+
+  const leaveThisMonth = monthEntries.reduce((sum, e) => {
+    if (!e.isHalfDay) return sum + (e.type === 'LEAVE' ? 1 : 0);
+    let c = 0;
+    if (e.type === 'LEAVE') c += 0.5;
+    if (e.secondHalfType === 'LEAVE') c += 0.5;
+    return sum + c;
+  }, 0);
+
   const holidayThisMonth = monthEntries.filter(e => e.type === 'HOLIDAY').length;
   const wfhQuota = company?.wfhPerMonth || 8;
   const today = toDateStr(now);
@@ -463,10 +492,11 @@ export default function Dashboard() {
     ...monthEntries.filter(e => e.type === 'HOLIDAY').map(e => e.date)
   ]);
 
-  const officeDays = totalWorkingDaysThisMonth - wfhThisMonth - remoteThisMonth - leaveThisMonth - holidayDatesThisMonth.size;
+  const rawOfficeDays = totalWorkingDaysThisMonth - wfhThisMonth - remoteThisMonth - leaveThisMonth - holidayDatesThisMonth.size;
+  const officeDays = Math.max(0, Number(rawOfficeDays.toFixed(1)));
 
   const upcoming = allEntries
-    .filter(e => e.date >= today && ['WFH', 'LEAVE', 'HOLIDAY', 'REMOTE'].includes(e.type))
+    .filter(e => e.date >= today && (['WFH', 'LEAVE', 'HOLIDAY', 'REMOTE'].includes(e.type) || ['WFH', 'LEAVE', 'REMOTE'].includes(e.secondHalfType)))
     .slice(0, 5);
 
   const TYPE_DOT = { WFH: 'bg-blue-500', LEAVE: 'bg-emerald-500', HOLIDAY: 'bg-violet-500', REMOTE: 'bg-orange-500' };
@@ -496,17 +526,17 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={Home} label="WFH This Month" value={wfhThisMonth} sub={`of ${wfhQuota} quota`} color="text-blue-400" bgColor="bg-blue-500/10" />
-        <StatCard icon={CalendarCheck} label="WFH Remaining" value={wfhQuota - wfhThisMonth} sub="days left" color="text-cyan-400" bgColor="bg-cyan-500/10" />
-        <StatCard icon={Monitor} label="Remote Days" value={remoteThisMonth} sub="this month" color="text-orange-400" bgColor="bg-orange-500/10" />
-        <StatCard icon={TrendingUp} label="Office Days" value={officeDays} sub={`of ${totalWorkingDaysThisMonth} working days`} color="text-violet-400" bgColor="bg-violet-500/10" />
+        <StatCard icon={Home} label="WFH This Month" value={formatDayCount(wfhThisMonth)} sub={`of ${wfhQuota} quota`} color="text-blue-400" bgColor="bg-blue-500/10" />
+        <StatCard icon={CalendarCheck} label="WFH Remaining" value={formatDayCount(Math.max(0, wfhQuota - wfhThisMonth))} sub="days left" color="text-cyan-400" bgColor="bg-cyan-500/10" />
+        <StatCard icon={Monitor} label="Remote Days" value={formatDayCount(remoteThisMonth)} sub="this month" color="text-orange-400" bgColor="bg-orange-500/10" />
+        <StatCard icon={TrendingUp} label="Office Days" value={formatDayCount(officeDays)} sub={`of ${totalWorkingDaysThisMonth} working days`} color="text-violet-400" bgColor="bg-violet-500/10" />
       </div>
 
       {/* WFH quota bar */}
       <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
         <div className="flex justify-between text-sm mb-2">
           <span className="text-slate-300 font-medium">WFH Quota</span>
-          <span className="text-blue-400 font-semibold">{wfhThisMonth}/{wfhQuota}</span>
+          <span className="text-blue-400 font-semibold">{formatDayCount(wfhThisMonth)}/{wfhQuota}</span>
         </div>
         <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
           <div className="h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-700"
@@ -568,18 +598,22 @@ export default function Dashboard() {
           <div className="space-y-2">
             {upcoming.map(e => {
               const d = parseISO(e.date);
+              const info = getEntryDisplayInfo(e, company);
               return (
                 <div key={e._id} className="flex items-center gap-3 p-3 rounded-xl bg-slate-700/40 border border-slate-700">
                   <div className={`w-2 h-2 rounded-full flex-shrink-0 ${TYPE_DOT[e.type] || 'bg-slate-500'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-slate-200 text-sm">{format(d, 'EEE, MMM d')}</p>
+                    {e.isHalfDay && (
+                      <p className="text-[10px] text-amber-400/80 font-medium">Half-Day Booking</p>
+                    )}
                   </div>
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-lg flex-shrink-0
                     ${e.type === 'WFH' ? 'bg-blue-500/20 text-blue-300' :
                       e.type === 'REMOTE' ? 'bg-orange-500/20 text-orange-300' :
                       e.type === 'LEAVE' ? 'bg-emerald-500/20 text-emerald-300' :
                         'bg-violet-500/20 text-violet-300'}`}>
-                    {e.type}{e.leaveType ? ` · ${e.leaveType}` : ''}
+                    {info?.badge || info?.summary || e.type}
                   </span>
                 </div>
               );
