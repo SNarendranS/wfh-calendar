@@ -9,7 +9,14 @@ router.get('/', protect, async (req, res) => {
   try {
     const company = await Company.findById(req.user.companyId);
     if (!company) return res.status(404).json({ message: 'Company not found' });
-    res.json(company);
+    const obj = company.toObject();
+    if (obj.leaveTypes) {
+      obj.leaveTypes = obj.leaveTypes.map(lt => ({
+        ...lt,
+        allowHalfDay: lt.allowHalfDay !== undefined ? lt.allowHalfDay : (lt.key === 'PL' || lt.key === 'ML' || lt.key === 'UL'),
+      }));
+    }
+    res.json(obj);
   } catch (err) { res.status(500).json({ message: err.message }); }
 });
 

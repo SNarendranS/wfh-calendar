@@ -18,11 +18,11 @@ const ACCRUAL_FREQUENCIES = [
 ];
 
 const DEFAULT_LEAVE_TYPES = [
-  { key: 'PL',  label: 'Paid Leave',     yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true, maxCarryover: 5, unlimited: false, accrualRule: { frequency: 'monthly', creditDay: 30 } },
-  { key: 'ML',  label: 'Medical Leave',  yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
-  { key: 'EL',  label: 'Election Leave', yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
-  { key: 'UL',  label: 'Unpaid Leave',   yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, maxCarryover: 0, unlimited: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },
-  { key: 'PAT', label: 'Paternity Leave',yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'PL',  label: 'Paid Leave',     yearlyQuota: 24, monthlyQuota: 0, weeklyQuota: 0, color: '#10b981', carryForward: true, maxCarryover: 5, unlimited: false, allowHalfDay: true,  accrualRule: { frequency: 'monthly', creditDay: 30 } },
+  { key: 'ML',  label: 'Medical Leave',  yearlyQuota: 6,  monthlyQuota: 0, weeklyQuota: 0, color: '#f59e0b', carryForward: false, maxCarryover: 0, unlimited: false, allowHalfDay: true,  accrualRule: { frequency: 'halfYearly', creditDay: 1 } },
+  { key: 'EL',  label: 'Election Leave', yearlyQuota: 1,  monthlyQuota: 0, weeklyQuota: 0, color: '#8b5cf6', carryForward: false, maxCarryover: 0, unlimited: false, allowHalfDay: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'UL',  label: 'Unpaid Leave',   yearlyQuota: 0,  monthlyQuota: 0, weeklyQuota: 0, color: '#6b7280', carryForward: false, maxCarryover: 0, unlimited: true,  allowHalfDay: true,  accrualRule: { frequency: 'yearly', creditDay: 1 } },
+  { key: 'PAT', label: 'Paternity Leave',yearlyQuota: 5,  monthlyQuota: 0, weeklyQuota: 0, color: '#06b6d4', carryForward: false, maxCarryover: 0, unlimited: false, allowHalfDay: false, accrualRule: { frequency: 'yearly', creditDay: 1 } },
 ];
 
 function Section({ title, children, defaultOpen = true }) {
@@ -88,17 +88,32 @@ function LeaveTypeCard({ lt, i, onUpdate, onRemove }) {
           </div>
         </div>
 
-        {/* Unlimited toggle */}
-        <label className="flex items-center gap-2.5 cursor-pointer group">
-          <div onClick={() => onUpdate(i, 'unlimited', !lt.unlimited)}
-            className={`w-10 h-5 rounded-full transition-colors flex-shrink-0 relative ${lt.unlimited ? 'bg-blue-600' : 'bg-slate-700'}`}>
-            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${lt.unlimited ? 'left-5' : 'left-0.5'}`} />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Infinity className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-slate-300 text-xs font-medium">Unlimited (no quota)</span>
-          </div>
-        </label>
+        {/* Toggles row: Unlimited & Allow Half Day */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+          {/* Unlimited toggle */}
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <div onClick={() => onUpdate(i, 'unlimited', !lt.unlimited)}
+              className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative ${lt.unlimited ? 'bg-blue-600' : 'bg-slate-700'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${lt.unlimited ? 'left-4.5' : 'left-0.5'}`} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Infinity className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-slate-300 text-xs font-medium">Unlimited</span>
+            </div>
+          </label>
+
+          {/* Allow Half Day toggle */}
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <div onClick={() => onUpdate(i, 'allowHalfDay', !lt.allowHalfDay)}
+              className={`w-9 h-5 rounded-full transition-colors flex-shrink-0 relative ${lt.allowHalfDay ? 'bg-emerald-600' : 'bg-slate-700'}`}>
+              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${lt.allowHalfDay ? 'left-4.5' : 'left-0.5'}`} />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold px-1 py-0.2 rounded bg-slate-800 text-emerald-400 border border-slate-700">½</span>
+              <span className="text-slate-300 text-xs font-medium">Allow Half Day</span>
+            </div>
+          </label>
+        </div>
 
         {/* Quota fields — disabled when unlimited */}
         <div className="grid grid-cols-3 gap-2">
@@ -213,7 +228,7 @@ export default function SettingsPage() {
   });
 
   const addLeaveType = () => setForm(p => ({
-    ...p, leaveTypes: [...p.leaveTypes, { key: '', label: '', yearlyQuota: 0, monthlyQuota: 0, weeklyQuota: 0, color: '#6366f1', carryForward: false, maxCarryover: 0, unlimited: false, accrualRule: { frequency: 'yearly', creditDay: 1 } }]
+    ...p, leaveTypes: [...p.leaveTypes, { key: '', label: '', yearlyQuota: 0, monthlyQuota: 0, weeklyQuota: 0, color: '#6366f1', carryForward: false, maxCarryover: 0, unlimited: false, allowHalfDay: false, accrualRule: { frequency: 'yearly', creditDay: 1 } }]
   }));
 
   const updateLeaveType = (i, field, val) => setForm(p => {

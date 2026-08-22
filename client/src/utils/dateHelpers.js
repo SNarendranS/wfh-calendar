@@ -52,3 +52,60 @@ export function isWeekend(date) {
   const d = isoWeekday(date);
   return d === 6 || d === 7;
 }
+
+export function formatDayCount(num) {
+  if (num === null || num === undefined) return '0';
+  if (num === Infinity) return '∞';
+  const val = Number(num);
+  return Number.isInteger(val) ? val.toString() : val.toFixed(1);
+}
+
+export function getEntryDisplayInfo(entry, company) {
+  if (!entry) return null;
+  const mainCfg = TYPE_CONFIG[entry.type] || TYPE_CONFIG.OFFICE;
+
+  if (!entry.isHalfDay) {
+    let sublabel = entry.leaveType ? ` · ${entry.leaveType}` : '';
+    return {
+      isHalfDay: false,
+      label: `${entry.type}${sublabel}`,
+      shortLabel: entry.type === 'LEAVE' ? (entry.leaveType || 'L') : entry.type,
+      cfg: mainCfg,
+      color: mainCfg.color,
+    };
+  }
+
+  // Half-Day Entry
+  let firstLabel = entry.type === 'LEAVE' ? (entry.leaveType || 'Leave') : entry.type;
+  let secondLabel = 'Office';
+  let secondCfg = TYPE_CONFIG.OFFICE;
+
+  if (entry.secondHalfType) {
+    secondLabel = entry.secondHalfType === 'LEAVE' ? (entry.secondHalfLeaveType || 'Leave') : entry.secondHalfType;
+    secondCfg = TYPE_CONFIG[entry.secondHalfType] || TYPE_CONFIG.OFFICE;
+  }
+
+  if (entry.halfDaySession === 'SECOND_HALF') {
+    return {
+      isHalfDay: true,
+      session: 'SECOND_HALF',
+      firstHalf: { type: 'OFFICE', label: 'Office', cfg: TYPE_CONFIG.OFFICE },
+      secondHalf: { type: entry.type, label: firstLabel, cfg: mainCfg },
+      summary: `½ ${firstLabel} (PM)`,
+      badge: `PM: ${firstLabel}`,
+    };
+  }
+
+  return {
+    isHalfDay: true,
+    session: entry.halfDaySession || 'FIRST_HALF',
+    firstHalf: { type: entry.type, label: firstLabel, cfg: mainCfg },
+    secondHalf: { type: entry.secondHalfType || 'OFFICE', label: secondLabel, cfg: secondCfg },
+    summary: entry.secondHalfType && entry.secondHalfType !== 'OFFICE'
+      ? `${firstLabel} / ${secondLabel}`
+      : `½ ${firstLabel} (AM)`,
+    badge: entry.secondHalfType && entry.secondHalfType !== 'OFFICE'
+      ? `${firstLabel} + ${secondLabel}`
+      : `AM: ${firstLabel}`,
+  };
+}
