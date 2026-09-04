@@ -250,14 +250,14 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, onOpenMul
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full lg:max-w-md bg-slate-800 rounded-t-3xl lg:rounded-2xl border border-slate-700 shadow-2xl mb-16 lg:mb-0 max-h-[90vh] flex flex-col">
-        <div className="flex justify-center pt-3 pb-1 lg:hidden">
+    <div className="fixed inset-0 z-[70] flex items-end lg:items-center justify-center">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full lg:max-w-md bg-slate-800 rounded-t-3xl lg:rounded-2xl border border-slate-700 shadow-2xl max-h-[90dvh] lg:max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex justify-center pt-3 pb-1 lg:hidden flex-shrink-0 cursor-grab">
           <div className="w-10 h-1 bg-slate-600 rounded-full" />
         </div>
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-3.5 lg:py-4 border-b border-slate-700 flex-shrink-0">
           <div>
             <h3 className="text-white font-semibold">{format(date, 'EEE, MMM d yyyy')}</h3>
             <p className="text-slate-400 text-xs mt-0.5">{entry ? 'Edit entry' : 'Add entry'}</p>
@@ -281,7 +281,7 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, onOpenMul
           </div>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
           {warnings.length > 0 && (
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 space-y-2">
               {warnings.map((w, i) => (
@@ -421,18 +421,21 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, onOpenMul
           </div>
         </div>
 
-        <div className="flex gap-2 px-5 pb-6 lg:pb-5 pt-3 border-t border-slate-700/80 flex-shrink-0" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div 
+          className="flex gap-2 px-5 py-3 border-t border-slate-700/80 bg-slate-800 flex-shrink-0 z-10 shadow-[0_-4px_16px_rgba(0,0,0,0.4)]" 
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+        >
           {entry && (
             <button onClick={() => { onDelete(toDateStr(date)); toast.info('Removed', `Entry cleared for ${format(date, 'MMM d')}`); onClose(); }}
-              className="w-12 h-12 flex items-center justify-center bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl flex-shrink-0 active:bg-red-500/20">
+              className="w-12 h-11 flex items-center justify-center bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl flex-shrink-0 active:bg-red-500/20">
               <Trash2 className="w-4 h-4" />
             </button>
           )}
-          <button onClick={onClose} className="flex-1 py-3 bg-slate-700 text-slate-300 rounded-xl text-sm font-medium active:bg-slate-600">
+          <button onClick={onClose} className="flex-1 py-2.5 bg-slate-700 text-slate-300 rounded-xl text-xs font-medium active:bg-slate-600">
             Cancel
           </button>
           <button onClick={handleSaveClick} disabled={loading || hasLeaveValidationError}
-            className={`flex-1 py-3 rounded-xl text-sm font-semibold transition disabled:opacity-50
+            className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition disabled:opacity-50
               ${pendingSave ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white'}`}>
             {loading ? 'Saving...' : pendingSave ? 'Save Anyway' : 'Save'}
           </button>
@@ -819,7 +822,7 @@ export default function CalendarPage() {
 
       {/* Floating Drag Indicator */}
       {isDragging && activeRange && activeRange.start !== activeRange.end && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md border border-blue-500/60 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5 text-xs font-semibold animate-pulse pointer-events-none">
+        <div className="fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-slate-900/95 backdrop-blur-md border border-blue-500/60 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5 text-xs font-semibold animate-pulse pointer-events-none whitespace-nowrap">
           <CalendarRange className="w-4 h-4 text-blue-400" />
           <span>
             Selecting {format(parseISO(activeRange.start), 'MMM d')} – {format(parseISO(activeRange.end), 'MMM d')} (Release to set)

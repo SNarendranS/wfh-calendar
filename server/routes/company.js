@@ -22,10 +22,28 @@ router.get('/', protect, async (req, res) => {
 
 router.put('/', protect, async (req, res) => {
   try {
-    const { name, wfhPerMonth, preferredWfhDays, leaveTypes, publicHolidays, workingDays } = req.body;
+    const {
+      name,
+      wfhPerMonth,
+      preferredWfhDays,
+      leaveTypes,
+      publicHolidays,
+      workingDays,
+      skipWeekendsOnMultiDay,
+      skipHolidaysOnMultiDay
+    } = req.body;
     const company = await Company.findByIdAndUpdate(
       req.user.companyId,
-      { name, wfhPerMonth, preferredWfhDays, leaveTypes, publicHolidays, workingDays },
+      {
+        name,
+        wfhPerMonth,
+        preferredWfhDays,
+        leaveTypes,
+        publicHolidays,
+        workingDays,
+        skipWeekendsOnMultiDay,
+        skipHolidaysOnMultiDay
+      },
       { new: true, runValidators: true }
     );
 

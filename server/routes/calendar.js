@@ -440,6 +440,13 @@ router.post('/multi-day', protect, async (req, res) => {
     const holidayDateSet = new Set(holidays.map(h => h.date));
     const isSingleDay = startDate === endDate;
 
+    const shouldSkipWeekends = skipWeekends !== undefined
+      ? skipWeekends
+      : (company?.skipWeekendsOnMultiDay !== undefined ? company.skipWeekendsOnMultiDay : true);
+    const shouldSkipHolidays = skipHolidays !== undefined
+      ? skipHolidays
+      : (company?.skipHolidaysOnMultiDay !== undefined ? company.skipHolidaysOnMultiDay : true);
+
     // Filter and build proposed entry for each date
     const dateEntries = [];
 
@@ -448,10 +455,10 @@ router.post('/multi-day', protect, async (req, res) => {
       const dayOfWeek = dObj.getDay(); // 0=Sun, 6=Sat
       const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6;
 
-      if (skipWeekends && isWeekendDay) {
+      if (shouldSkipWeekends && isWeekendDay) {
         continue;
       }
-      if (skipHolidays && holidayDateSet.has(ds)) {
+      if (shouldSkipHolidays && holidayDateSet.has(ds)) {
         continue;
       }
 
@@ -507,26 +514,70 @@ router.post('/multi-day', protect, async (req, res) => {
           }
         } else {
           // Multi-day range
-          if (ds === startDate && startSession === 'SECOND_HALF') {
-            entry = {
-              type,
-              leaveType: type === 'LEAVE' ? leaveType : undefined,
-              isHalfDay: true,
-              halfDaySession: 'SECOND_HALF',
-              secondHalfType: null,
-              secondHalfLeaveType: null,
-              note: note || undefined,
-            };
-          } else if (ds === endDate && endSession === 'FIRST_HALF') {
-            entry = {
-              type,
-              leaveType: type === 'LEAVE' ? leaveType : undefined,
-              isHalfDay: true,
-              halfDaySession: 'FIRST_HALF',
-              secondHalfType: 'OFFICE',
-              secondHalfLeaveType: null,
-              note: note || undefined,
-            };
+          if (ds === startDate) {
+            if (startSession === 'FIRST_HALF') {
+              entry = {
+                type,
+                leaveType: type === 'LEAVE' ? leaveType : undefined,
+                isHalfDay: true,
+                halfDaySession: 'FIRST_HALF',
+                secondHalfType: 'OFFICE',
+                secondHalfLeaveType: null,
+                note: note || undefined,
+              };
+            } else if (startSession === 'SECOND_HALF') {
+              entry = {
+                type,
+                leaveType: type === 'LEAVE' ? leaveType : undefined,
+                isHalfDay: true,
+                halfDaySession: 'SECOND_HALF',
+                secondHalfType: null,
+                secondHalfLeaveType: null,
+                note: note || undefined,
+              };
+            } else {
+              entry = {
+                type,
+                leaveType: type === 'LEAVE' ? leaveType : undefined,
+                isHalfDay: false,
+                halfDaySession: null,
+                secondHalfType: null,
+                secondHalfLeaveType: null,
+                note: note || undefined,
+              };
+            }
+          } else if (ds === endDate) {
+            if (endSession === 'FIRST_HALF') {
+              entry = {
+                type,
+                leaveType: type === 'LEAVE' ? leaveType : undefined,
+                isHalfDay: true,
+                halfDaySession: 'FIRST_HALF',
+                secondHalfType: 'OFFICE',
+                secondHalfLeaveType: null,
+                note: note || undefined,
+              };
+            } else if (endSession === 'SECOND_HALF') {
+              entry = {
+                type,
+                leaveType: type === 'LEAVE' ? leaveType : undefined,
+                isHalfDay: true,
+                halfDaySession: 'SECOND_HALF',
+                secondHalfType: null,
+                secondHalfLeaveType: null,
+                note: note || undefined,
+              };
+            } else {
+              entry = {
+                type,
+                leaveType: type === 'LEAVE' ? leaveType : undefined,
+                isHalfDay: false,
+                halfDaySession: null,
+                secondHalfType: null,
+                secondHalfLeaveType: null,
+                note: note || undefined,
+              };
+            }
           } else {
             entry = {
               type,

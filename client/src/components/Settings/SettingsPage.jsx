@@ -193,7 +193,9 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: '', wfhPerMonth: 8, preferredWfhDays: [4,5],
-    leaveTypes: DEFAULT_LEAVE_TYPES, publicHolidays: [], workingDays: [1,2,3,4,5]
+    leaveTypes: DEFAULT_LEAVE_TYPES, publicHolidays: [], workingDays: [1,2,3,4,5],
+    skipWeekendsOnMultiDay: true,
+    skipHolidaysOnMultiDay: true,
   });
 
   useEffect(() => {
@@ -206,6 +208,8 @@ export default function SettingsPage() {
         leaveTypes: r.data.leaveTypes?.length ? r.data.leaveTypes : DEFAULT_LEAVE_TYPES,
         publicHolidays: r.data.publicHolidays || [],
         workingDays: r.data.workingDays || [1,2,3,4,5],
+        skipWeekendsOnMultiDay: r.data.skipWeekendsOnMultiDay !== undefined ? r.data.skipWeekendsOnMultiDay : true,
+        skipHolidaysOnMultiDay: r.data.skipHolidaysOnMultiDay !== undefined ? r.data.skipHolidaysOnMultiDay : true,
       });
     }).catch(() => toast.error('Failed to load', 'Could not load company settings'));
   }, []);
@@ -286,6 +290,39 @@ export default function SettingsPage() {
 
         <Section title="Working Days" defaultOpen={false}>
           <DayToggle days={form.workingDays} field="workingDays" onChange={toggleDay} color="green" />
+        </Section>
+
+        <Section title="Multi-Day Range Selection (Defaults)" defaultOpen={true}>
+          <p className="text-slate-500 text-xs -mt-1">
+            Global defaults when marking a continuous date range on the calendar.
+          </p>
+          <div className="space-y-2 pt-1">
+            <label className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 cursor-pointer select-none">
+              <div>
+                <span className="text-xs font-semibold text-slate-200 block">Skip Weekends</span>
+                <span className="text-[11px] text-slate-400 block">Automatically exclude Saturdays & Sundays</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={form.skipWeekendsOnMultiDay}
+                onChange={e => setForm(p => ({ ...p, skipWeekendsOnMultiDay: e.target.checked }))}
+                className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-0"
+              />
+            </label>
+
+            <label className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-700/60 cursor-pointer select-none">
+              <div>
+                <span className="text-xs font-semibold text-slate-200 block">Skip Public Holidays</span>
+                <span className="text-[11px] text-slate-400 block">Do not overwrite recognized company holidays</span>
+              </div>
+              <input
+                type="checkbox"
+                checked={form.skipHolidaysOnMultiDay}
+                onChange={e => setForm(p => ({ ...p, skipHolidaysOnMultiDay: e.target.checked }))}
+                className="w-4 h-4 rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-0"
+              />
+            </label>
+          </div>
         </Section>
 
         <Section title={`Leave Types (${form.leaveTypes.length})`}>

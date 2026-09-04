@@ -36,6 +36,8 @@ const companySchema = new mongoose.Schema({
     name: { type: String, required: true }
   }],
   workingDays: { type: [Number], default: [1,2,3,4,5] },
+  skipWeekendsOnMultiDay: { type: Boolean, default: true },
+  skipHolidaysOnMultiDay: { type: Boolean, default: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 
