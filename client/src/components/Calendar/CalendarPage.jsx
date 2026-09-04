@@ -1,15 +1,29 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
-import { ChevronLeft, ChevronRight, Wand2, Trash2, X, AlertTriangle, Monitor, ArrowLeft, Lock, User, Clock, Sun, Moon, Split } from 'lucide-react';
+import { format, parseISO, addDays } from 'date-fns';
+import { ChevronLeft, ChevronRight, Wand2, Trash2, X, AlertTriangle, Monitor, ArrowLeft, Lock, User, Clock, Sun, Moon, Split, CalendarRange } from 'lucide-react';
 import { useCalendar } from '../../hooks/useCalendar.js';
 import { useToast } from '../Layout/Toast.jsx';
 import { getCalendarGrid, DAY_NAMES, toDateStr, TYPE_CONFIG, MONTH_NAMES_FULL, isWeekend, formatDayCount, getEntryDisplayInfo } from '../../utils/dateHelpers.js';
 import api from '../../utils/api.js';
+import MultiDayModal from './MultiDayModal.jsx';
 
 const TYPES = ['WFH', 'LEAVE', 'HOLIDAY', 'REMOTE', 'OFFICE'];
 
-function DayCell({ date, entry, company, onClick, today }) {
+function DayCell({
+  date,
+  entry,
+  company,
+  onClick,
+  today,
+  isInRange,
+  isRangeStart,
+  isRangeEnd,
+  onMouseDown,
+  onMouseEnter,
+  onMouseUp,
+  onTouchStart
+}) {
   if (!date) return <div className="aspect-square bg-slate-900/20 rounded-lg lg:h-20" />;
   const ds = toDateStr(date);
   const isToday = ds === today;
@@ -22,14 +36,30 @@ function DayCell({ date, entry, company, onClick, today }) {
   const cfg = entry ? TYPE_CONFIG[entry.type] : null;
 
   return (
-    <div onClick={() => onClick(date, entry)}
+    <div
+      data-date={ds}
+      onMouseDown={(e) => onMouseDown?.(date, e)}
+      onMouseEnter={() => onMouseEnter?.(date)}
+      onMouseUp={(e) => onMouseUp?.(date, e)}
+      onTouchStart={(e) => onTouchStart?.(date, e)}
+      onClick={(e) => onClick?.(date, entry, e)}
       className={`aspect-square lg:aspect-auto lg:h-20 rounded-lg lg:rounded-xl border cursor-pointer transition-all active:scale-95 lg:hover:scale-[1.02] relative overflow-hidden select-none
-        ${isToday ? 'ring-2 ring-blue-500' : ''}
-        ${weekend && !entry ? 'bg-slate-800/30 border-slate-700/30' : 
-          defaultOffice ? 'bg-slate-800/60 border-slate-700/30' :
-          !entry ? 'bg-slate-800 border-slate-700' :
-          entry.isHalfDay ? 'bg-slate-800/90 border-slate-600/60' : `${cfg.bg} ${cfg.border}`}
+        ${isInRange
+          ? 'bg-blue-600/35 border-blue-400 ring-2 ring-blue-500/80 shadow-lg z-20 scale-[1.02]'
+          : isToday
+            ? 'ring-2 ring-blue-500'
+            : ''
+        }
+        ${!isInRange && weekend && !entry ? 'bg-slate-800/30 border-slate-700/30' : 
+          !isInRange && defaultOffice ? 'bg-slate-800/60 border-slate-700/30' :
+          !isInRange && !entry ? 'bg-slate-800 border-slate-700' :
+          !isInRange && entry?.isHalfDay ? 'bg-slate-800/90 border-slate-600/60' :
+          !isInRange && entry ? `${cfg.bg} ${cfg.border}` : ''}
       `}>
+      {/* Visual indicator bar for cells in selected drag range */}
+      {isInRange && (
+        <div className="absolute top-0 inset-x-0 h-1 bg-blue-400 pointer-events-none z-20" />
+      )}
       {/* Background split gradient for half-day */}
       {entry && entry.isHalfDay && (
         <div className="absolute inset-0 opacity-15 pointer-events-none"
@@ -43,10 +73,22 @@ function DayCell({ date, entry, company, onClick, today }) {
 
       <div className="p-1 lg:p-2 h-full flex flex-col relative z-10">
         <div className="flex items-center justify-between">
-          <span className={`text-[10px] lg:text-xs font-bold ${isToday ? 'text-blue-400' : weekend ? 'text-slate-600' : 'text-slate-300'}`}>
+          <span className={`text-[10px] lg:text-xs font-bold ${
+            isInRange ? 'text-white' : isToday ? 'text-blue-400' : weekend ? 'text-slate-600' : 'text-slate-300'
+          }`}>
             {date.getDate()}
           </span>
-          {entry?.isHalfDay && (
+          {isRangeStart && (
+            <span className="text-[7px] font-extrabold px-1 rounded bg-blue-500 text-white uppercase hidden lg:inline-block">
+              Start
+            </span>
+          )}
+          {isRangeEnd && !isRangeStart && (
+            <span className="text-[7px] font-extrabold px-1 rounded bg-blue-500 text-white uppercase hidden lg:inline-block">
+              End
+            </span>
+          )}
+          {entry?.isHalfDay && !isInRange && (
             <span className="text-[8px] font-extrabold px-1 py-0.2 rounded bg-slate-700/80 text-amber-300 hidden lg:inline-block">
               ½ DAY
             </span>
@@ -121,7 +163,7 @@ function DayCell({ date, entry, company, onClick, today }) {
   );
 }
 
-function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) {
+function EntryModal({ date, entry, company, onClose, onSave, onDelete, onOpenMultiDay, toast }) {
   // Mode: 'FULL' | 'FIRST_HALF' | 'SECOND_HALF' | 'CUSTOM_SPLIT'
   const initialMode = !entry?.isHalfDay
     ? 'FULL'
@@ -220,9 +262,23 @@ function EntryModal({ date, entry, company, onClose, onSave, onDelete, toast }) 
             <h3 className="text-white font-semibold">{format(date, 'EEE, MMM d yyyy')}</h3>
             <p className="text-slate-400 text-xs mt-0.5">{entry ? 'Edit entry' : 'Add entry'}</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl bg-slate-700 text-slate-400 active:bg-slate-600">
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenMultiDay && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenMultiDay(date);
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 text-xs font-semibold flex items-center gap-1.5 transition active:scale-95">
+                <CalendarRange className="w-3.5 h-3.5" />
+                <span>Multi-day</span>
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 rounded-xl bg-slate-700 text-slate-400 active:bg-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
@@ -404,7 +460,132 @@ export default function CalendarPage() {
   const [viewError, setViewError] = useState(null);
   const today = toDateStr(now);
   const toast = useToast();
-  const { entryMap, loading, addEntry, removeEntry, bulkSetWfh, getSuggestions } = useCalendar(year, month);
+  const [showMultiDayModal, setShowMultiDayModal] = useState(false);
+  const [multiDayRange, setMultiDayRange] = useState(null);
+  const [dragStart, setDragStart] = useState(null);
+  const [dragCurrent, setDragCurrent] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragMoved, setDragMoved] = useState(false);
+  const [lastSelectedDate, setLastSelectedDate] = useState(null);
+  const ignoreClickRef = useRef(false);
+
+  const { entryMap, loading, addEntry, removeEntry, bulkSetWfh, getSuggestions, batchMarkDays } = useCalendar(year, month);
+
+  const activeRange = useMemo(() => {
+    if (!isDragging || !dragStart || !dragCurrent) return null;
+    const start = dragStart < dragCurrent ? dragStart : dragCurrent;
+    const end = dragStart < dragCurrent ? dragCurrent : dragStart;
+    return { start, end };
+  }, [isDragging, dragStart, dragCurrent]);
+
+  const handleCellMouseDown = (date, e) => {
+    if (isReadOnly || !date) return;
+    if (e.button !== 0) return;
+    const ds = toDateStr(date);
+    setIsDragging(true);
+    setDragMoved(false);
+    setDragStart(ds);
+    setDragCurrent(ds);
+  };
+
+  const handleCellMouseEnter = (date) => {
+    if (!isDragging || isReadOnly || !date) return;
+    const ds = toDateStr(date);
+    if (ds !== dragCurrent) {
+      setDragCurrent(ds);
+      setDragMoved(true);
+    }
+  };
+
+  const handleCellMouseUp = (date) => {
+    if (!isDragging || isReadOnly) return;
+    if (dragMoved && dragStart && dragCurrent && dragStart !== dragCurrent) {
+      const start = dragStart < dragCurrent ? dragStart : dragCurrent;
+      const end = dragStart < dragCurrent ? dragCurrent : dragStart;
+      ignoreClickRef.current = true;
+      setTimeout(() => { ignoreClickRef.current = false; }, 200);
+      setMultiDayRange({ start, end });
+      setShowMultiDayModal(true);
+    }
+    setIsDragging(false);
+    setDragStart(null);
+    setDragCurrent(null);
+  };
+
+  const handleTouchStart = (date) => {
+    if (isReadOnly || !date) return;
+    const ds = toDateStr(date);
+    setIsDragging(true);
+    setDragMoved(false);
+    setDragStart(ds);
+    setDragCurrent(ds);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const cell = el?.closest('[data-date]');
+    if (cell && cell.dataset.date && cell.dataset.date !== dragCurrent) {
+      setDragCurrent(cell.dataset.date);
+      setDragMoved(true);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging) return;
+    if (dragMoved && dragStart && dragCurrent && dragStart !== dragCurrent) {
+      const start = dragStart < dragCurrent ? dragStart : dragCurrent;
+      const end = dragStart < dragCurrent ? dragCurrent : dragStart;
+      ignoreClickRef.current = true;
+      setTimeout(() => { ignoreClickRef.current = false; }, 200);
+      setMultiDayRange({ start, end });
+      setShowMultiDayModal(true);
+    }
+    setIsDragging(false);
+    setDragStart(null);
+    setDragCurrent(null);
+  };
+
+  useEffect(() => {
+    const onGlobalMouseUp = () => {
+      if (isDragging) {
+        if (dragMoved && dragStart && dragCurrent && dragStart !== dragCurrent) {
+          const start = dragStart < dragCurrent ? dragStart : dragCurrent;
+          const end = dragStart < dragCurrent ? dragCurrent : dragStart;
+          ignoreClickRef.current = true;
+          setTimeout(() => { ignoreClickRef.current = false; }, 200);
+          setMultiDayRange({ start, end });
+          setShowMultiDayModal(true);
+        }
+        setIsDragging(false);
+        setDragStart(null);
+        setDragCurrent(null);
+      }
+    };
+    window.addEventListener('mouseup', onGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', onGlobalMouseUp);
+  }, [isDragging, dragMoved, dragStart, dragCurrent]);
+
+  const handleCellClick = (date, entry, e) => {
+    if (isReadOnly || !date) return;
+    if (ignoreClickRef.current) return;
+
+    const ds = toDateStr(date);
+
+    if (e?.shiftKey && lastSelectedDate && lastSelectedDate !== ds) {
+      const start = lastSelectedDate < ds ? lastSelectedDate : ds;
+      const end = lastSelectedDate < ds ? ds : lastSelectedDate;
+      setMultiDayRange({ start, end });
+      setShowMultiDayModal(true);
+      setLastSelectedDate(ds);
+      return;
+    }
+
+    setLastSelectedDate(ds);
+    setSelectedDate(date);
+    setSelectedEntry(entry || null);
+  };
 
   useEffect(() => { api.get('/company').then(r => setCompany(r.data)).catch(() => {}); }, []);
 
@@ -572,13 +753,35 @@ export default function CalendarPage() {
             <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mr-2" /> Loading...
           </div>
         ) : (
-          <div className="grid grid-cols-7 gap-1">
-            {grid.map((date, i) => (
-              <DayCell key={i} date={date}
-                entry={date ? currentEntryMap[toDateStr(date)] : null}
-                company={company} today={today}
-                onClick={isReadOnly ? () => {} : (d, e) => { setSelectedDate(d); setSelectedEntry(e || null); }} />
-            ))}
+          <div
+            className="grid grid-cols-7 gap-1 select-none"
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}>
+            {grid.map((date, i) => {
+              if (!date) return <DayCell key={i} date={null} />;
+              const ds = toDateStr(date);
+              const isInRange = !!(activeRange && ds >= activeRange.start && ds <= activeRange.end);
+              const isRangeStart = !!(activeRange && ds === activeRange.start);
+              const isRangeEnd = !!(activeRange && ds === activeRange.end);
+
+              return (
+                <DayCell
+                  key={i}
+                  date={date}
+                  entry={currentEntryMap[ds]}
+                  company={company}
+                  today={today}
+                  isInRange={isInRange}
+                  isRangeStart={isRangeStart}
+                  isRangeEnd={isRangeEnd}
+                  onMouseDown={handleCellMouseDown}
+                  onMouseEnter={handleCellMouseEnter}
+                  onMouseUp={handleCellMouseUp}
+                  onTouchStart={handleTouchStart}
+                  onClick={handleCellClick}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -592,7 +795,36 @@ export default function CalendarPage() {
           onClose={() => { setSelectedDate(null); setSelectedEntry(null); }}
           onSave={addEntry}
           onDelete={removeEntry}
+          onOpenMultiDay={(d) => {
+            const startStr = toDateStr(d);
+            setMultiDayRange({ start: startStr, end: toDateStr(addDays(d, 2)) });
+            setShowMultiDayModal(true);
+          }}
         />
+      )}
+
+      {!isReadOnly && showMultiDayModal && (
+        <MultiDayModal
+          company={company}
+          initialStartDate={multiDayRange?.start}
+          initialEndDate={multiDayRange?.end}
+          toast={toast}
+          onClose={() => {
+            setShowMultiDayModal(false);
+            setMultiDayRange(null);
+          }}
+          onSubmit={batchMarkDays}
+        />
+      )}
+
+      {/* Floating Drag Indicator */}
+      {isDragging && activeRange && activeRange.start !== activeRange.end && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md border border-blue-500/60 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5 text-xs font-semibold animate-pulse pointer-events-none">
+          <CalendarRange className="w-4 h-4 text-blue-400" />
+          <span>
+            Selecting {format(parseISO(activeRange.start), 'MMM d')} – {format(parseISO(activeRange.end), 'MMM d')} (Release to set)
+          </span>
+        </div>
       )}
     </div>
   );

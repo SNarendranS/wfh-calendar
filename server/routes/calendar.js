@@ -1,5 +1,5 @@
 import express from 'express';
-import { format, parseISO, addDays } from 'date-fns';
+import { format, parseISO, addDays, eachDayOfInterval } from 'date-fns';
 import CalendarEntry from '../models/CalendarEntry.js';
 import LeaveBalance from '../models/LeaveBalance.js';
 import Company from '../models/Company.js';
@@ -8,6 +8,7 @@ import Follow from '../models/Follow.js';
 import Notification from '../models/Notification.js';
 import { protect } from '../middleware/auth.js';
 import { checkWfhWarning, suggestBestWfhDays } from '../utils/wfhLogic.js';
+import { ensureLeaveBalance } from './leaveBalance.js';
 
 const router = express.Router();
 
@@ -394,6 +395,332 @@ router.get('/suggest-wfh', protect, async (req, res) => {
     );
     res.json({ suggestions });
   } catch (err) { res.status(500).json({ message: err.message }); }
+});
+
+// Multi-day / Range batch marking with custom boundary half-day options
+router.post('/multi-day', protect, async (req, res) => {
+  try {
+    const {
+      startDate,
+      endDate,
+      type,
+      leaveType,
+      startSession = 'FULL', // 'FULL' | 'SECOND_HALF'
+      endSession = 'FULL',   // 'FULL' | 'FIRST_HALF'
+      singleDayMode = 'FULL', // 'FULL' | 'FIRST_HALF' | 'SECOND_HALF' | 'CUSTOM_SPLIT'
+      secondHalfType = null,
+      secondHalfLeaveType = null,
+      skipWeekends = true,
+      skipHolidays = true,
+      note
+    } = req.body;
+
+    if (!startDate || !endDate || !type) {
+      return res.status(400).json({ message: 'startDate, endDate, and type are required' });
+    }
+
+    const startObj = parseISO(startDate);
+    const endObj = parseISO(endDate);
+
+    if (isNaN(startObj.getTime()) || isNaN(endObj.getTime())) {
+      return res.status(400).json({ message: 'Invalid date format. Expected YYYY-MM-DD.' });
+    }
+
+    if (startObj > endObj) {
+      return res.status(400).json({ message: 'startDate cannot be after endDate' });
+    }
+
+    const allDates = eachDayOfInterval({ start: startObj, end: endObj });
+    if (allDates.length > 90) {
+      return res.status(400).json({ message: 'Date range cannot exceed 90 days at a time' });
+    }
+
+    const company = await Company.findById(req.user.companyId);
+    const holidays = company?.publicHolidays || [];
+    const holidayDateSet = new Set(holidays.map(h => h.date));
+    const isSingleDay = startDate === endDate;
+
+    // Filter and build proposed entry for each date
+    const dateEntries = [];
+
+    for (const dObj of allDates) {
+      const ds = format(dObj, 'yyyy-MM-dd');
+      const dayOfWeek = dObj.getDay(); // 0=Sun, 6=Sat
+      const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6;
+
+      if (skipWeekends && isWeekendDay) {
+        continue;
+      }
+      if (skipHolidays && holidayDateSet.has(ds)) {
+        continue;
+      }
+
+      let entry = null;
+      if (type !== 'CLEAR') {
+        if (isSingleDay) {
+          let sMode = singleDayMode;
+          if (sMode === 'FULL') {
+            if (startSession === 'SECOND_HALF') sMode = 'SECOND_HALF';
+            else if (startSession === 'FIRST_HALF' || endSession === 'FIRST_HALF') sMode = 'FIRST_HALF';
+          }
+
+          if (sMode === 'FIRST_HALF') {
+            entry = {
+              type,
+              leaveType: type === 'LEAVE' ? leaveType : undefined,
+              isHalfDay: true,
+              halfDaySession: 'FIRST_HALF',
+              secondHalfType: 'OFFICE',
+              secondHalfLeaveType: null,
+              note: note || undefined,
+            };
+          } else if (sMode === 'SECOND_HALF') {
+            entry = {
+              type,
+              leaveType: type === 'LEAVE' ? leaveType : undefined,
+              isHalfDay: true,
+              halfDaySession: 'SECOND_HALF',
+              secondHalfType: null,
+              secondHalfLeaveType: null,
+              note: note || undefined,
+            };
+          } else if (sMode === 'CUSTOM_SPLIT') {
+            entry = {
+              type,
+              leaveType: type === 'LEAVE' ? leaveType : undefined,
+              isHalfDay: true,
+              halfDaySession: 'CUSTOM_SPLIT',
+              secondHalfType: secondHalfType || 'OFFICE',
+              secondHalfLeaveType: secondHalfType === 'LEAVE' ? secondHalfLeaveType : null,
+              note: note || undefined,
+            };
+          } else {
+            entry = {
+              type,
+              leaveType: type === 'LEAVE' ? leaveType : undefined,
+              isHalfDay: false,
+              halfDaySession: null,
+              secondHalfType: null,
+              secondHalfLeaveType: null,
+              note: note || undefined,
+            };
+          }
+        } else {
+          // Multi-day range
+          if (ds === startDate && startSession === 'SECOND_HALF') {
+            entry = {
+              type,
+              leaveType: type === 'LEAVE' ? leaveType : undefined,
+              isHalfDay: true,
+              halfDaySession: 'SECOND_HALF',
+              secondHalfType: null,
+              secondHalfLeaveType: null,
+              note: note || undefined,
+            };
+          } else if (ds === endDate && endSession === 'FIRST_HALF') {
+            entry = {
+              type,
+              leaveType: type === 'LEAVE' ? leaveType : undefined,
+              isHalfDay: true,
+              halfDaySession: 'FIRST_HALF',
+              secondHalfType: 'OFFICE',
+              secondHalfLeaveType: null,
+              note: note || undefined,
+            };
+          } else {
+            entry = {
+              type,
+              leaveType: type === 'LEAVE' ? leaveType : undefined,
+              isHalfDay: false,
+              halfDaySession: null,
+              secondHalfType: null,
+              secondHalfLeaveType: null,
+              note: note || undefined,
+            };
+          }
+        }
+      }
+
+      dateEntries.push({
+        dateStr: ds,
+        dateObj: dObj,
+        entry
+      });
+    }
+
+    if (dateEntries.length === 0) {
+      return res.status(400).json({
+        message: 'No eligible dates found in the range (all dates were excluded by weekend or holiday filters).'
+      });
+    }
+
+    // 1. Validate half-day permissions if type is LEAVE
+    if (type === 'LEAVE') {
+      const hasHalfDay = dateEntries.some(d => d.entry?.isHalfDay);
+      if (hasHalfDay) {
+        const ltConfig = company?.leaveTypes?.find(l => l.key === leaveType);
+        if (ltConfig && ltConfig.allowHalfDay === false) {
+          return res.status(400).json({
+            message: `${ltConfig.label} cannot be taken as a half-day leave. Only full-day leave is allowed.`
+          });
+        }
+      }
+    }
+
+    // 2. Query all existing entries for user across these dates
+    const targetDateStrs = dateEntries.map(d => d.dateStr);
+    const existingEntries = await CalendarEntry.find({
+      userId: req.user._id,
+      date: { $in: targetDateStrs }
+    });
+    const existingMap = new Map(existingEntries.map(e => [e.date, e]));
+
+    // 3. Group by year and calculate leave balance deltas
+    // year -> { leaveKey -> delta }
+    const yearLeaveDeltas = {};
+
+    for (const item of dateEntries) {
+      const y = item.dateObj.getFullYear();
+      if (!yearLeaveDeltas[y]) yearLeaveDeltas[y] = {};
+
+      const oldEntry = existingMap.get(item.dateStr);
+      const oldUsage = getLeaveUsageByEntry(oldEntry);
+      const newUsage = item.entry ? getLeaveUsageByEntry(item.entry) : {};
+
+      const allKeys = new Set([...Object.keys(oldUsage), ...Object.keys(newUsage)]);
+      for (const k of allKeys) {
+        const oldU = oldUsage[k] || 0;
+        const newU = newUsage[k] || 0;
+        const delta = newU - oldU;
+        yearLeaveDeltas[y][k] = (yearLeaveDeltas[y][k] || 0) + delta;
+      }
+    }
+
+    // Check leave balances against availability
+    for (const [yStr, deltas] of Object.entries(yearLeaveDeltas)) {
+      const year = parseInt(yStr);
+      let lb = await LeaveBalance.findOne({ userId: req.user._id, year });
+      if (!lb && company) {
+        lb = await ensureLeaveBalance(req.user._id, year, company);
+      }
+
+      for (const [lk, netDelta] of Object.entries(deltas)) {
+        if (netDelta > 0) {
+          const ltConfig = company?.leaveTypes?.find(l => l.key === lk);
+          if (ltConfig && !ltConfig.unlimited) {
+            const balance = lb?.balances?.find(b => b.leaveKey === lk);
+            const accrued = getAccrued(ltConfig, year);
+            const carried = balance?.carried || 0;
+            const available = accrued + carried;
+            const currentUsed = balance?.used || 0;
+
+            if (currentUsed + netDelta > available) {
+              return res.status(400).json({
+                message: `Insufficient leave balance for ${ltConfig.label} in ${year}. Currently used: ${currentUsed}/${available} (${accrued} accrued + ${carried} carried). Marking this range requires ${netDelta} more days.`
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Validate WFH quota per month if WFH is being added
+    const monthWfhDeltas = {}; // 'YYYY-M' -> { newWfh, oldWfh }
+    for (const item of dateEntries) {
+      const ym = `${item.dateObj.getFullYear()}-${item.dateObj.getMonth() + 1}`;
+      if (!monthWfhDeltas[ym]) monthWfhDeltas[ym] = { newWfh: 0, oldWfh: 0 };
+
+      const oldEntry = existingMap.get(item.dateStr);
+      monthWfhDeltas[ym].oldWfh += getWfhWeight(oldEntry);
+      monthWfhDeltas[ym].newWfh += getWfhWeight(item.entry);
+    }
+
+    const maxWfhQuota = company?.wfhPerMonth || 8;
+    for (const [ym, wfhInfo] of Object.entries(monthWfhDeltas)) {
+      const netWfhDelta = wfhInfo.newWfh - wfhInfo.oldWfh;
+      if (netWfhDelta > 0) {
+        const [y, m] = ym.split('-').map(Number);
+        const otherMonthEntries = await CalendarEntry.find({
+          userId: req.user._id,
+          year: y,
+          month: m,
+          date: { $nin: targetDateStrs }
+        });
+        const currentOtherWfh = otherMonthEntries.reduce((sum, e) => sum + getWfhWeight(e), 0);
+        if (currentOtherWfh + wfhInfo.newWfh > maxWfhQuota) {
+          return res.status(400).json({
+            message: `WFH quota for ${ym} (${maxWfhQuota} days) would be exceeded. You have ${currentOtherWfh} days on other dates, and this range requests ${wfhInfo.newWfh} days.`
+          });
+        }
+      }
+    }
+
+    // 5. Database execution (Safe & Atomic per entry)
+    if (type === 'CLEAR') {
+      await CalendarEntry.deleteMany({
+        userId: req.user._id,
+        date: { $in: targetDateStrs }
+      });
+    } else {
+      const bulkOps = dateEntries.map(item => ({
+        updateOne: {
+          filter: { userId: req.user._id, date: item.dateStr },
+          update: {
+            $set: {
+              userId: req.user._id,
+              date: item.dateStr,
+              type: item.entry.type,
+              leaveType: item.entry.leaveType,
+              note: item.entry.note,
+              year: item.dateObj.getFullYear(),
+              month: item.dateObj.getMonth() + 1,
+              isHalfDay: !!item.entry.isHalfDay,
+              halfDaySession: item.entry.halfDaySession,
+              secondHalfType: item.entry.secondHalfType,
+              secondHalfLeaveType: item.entry.secondHalfLeaveType,
+            }
+          },
+          upsert: true
+        }
+      }));
+      await CalendarEntry.bulkWrite(bulkOps);
+    }
+
+    // 6. Update Leave Balances
+    for (const [yStr, deltas] of Object.entries(yearLeaveDeltas)) {
+      const year = parseInt(yStr);
+      for (const [lk, netDelta] of Object.entries(deltas)) {
+        if (netDelta !== 0) {
+          await LeaveBalance.findOneAndUpdate(
+            { userId: req.user._id, year, 'balances.leaveKey': lk },
+            { $inc: { 'balances.$.used': netDelta } }
+          );
+        }
+      }
+    }
+
+    // 7. Check for WFH warnings
+    const warnings = [];
+    if (type === 'WFH') {
+      const preferredDays = company?.preferredWfhDays || [4, 5];
+      for (const item of dateEntries) {
+        if (item.entry?.type === 'WFH') {
+          const w = checkWfhWarning(item.dateStr, preferredDays, targetDateStrs);
+          if (w.length) warnings.push(...w);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      count: targetDateStrs.length,
+      updatedDates: targetDateStrs,
+      warnings: warnings.slice(0, 5),
+      message: `Successfully marked ${targetDateStrs.length} day(s).`
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 export default router;

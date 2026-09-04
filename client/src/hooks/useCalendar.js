@@ -53,7 +53,13 @@ export function useCalendar(year, month) {
     return data.suggestions;
   };
 
+  const batchMarkDays = async (payload) => {
+    const { data } = await api.post('/calendar/multi-day', payload);
+    await fetchEntries();
+    return data;
+  };
+
   const entryMap = entries.reduce((acc, e) => { acc[e.date] = e; return acc; }, {});
 
-  return { entries, entryMap, loading, error, addEntry, removeEntry, bulkSetWfh, getSuggestions, refetch: fetchEntries };
+  return { entries, entryMap, loading, error, addEntry, removeEntry, bulkSetWfh, getSuggestions, batchMarkDays, refetch: fetchEntries };
 }
